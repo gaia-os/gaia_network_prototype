@@ -1,2 +1,6 @@
 numpy>=1.20.0
 scipy>=1.7.0
+mcp>=0.1.0
+httpx>=0.26.0
+uvicorn>=0.25.0
+mcp-proxy>=0.3.2

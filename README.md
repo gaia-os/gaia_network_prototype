@@ -93,6 +93,50 @@ The demo will:
 4. Demonstrate how Node B updates its internal state based on new data
 5. Show how Node A gets updated information from Node B, including the rationale for the changes
 
+## MCP Integration
+
+The Gaia Network prototype now supports integration with the Model Context Protocol (MCP), which provides a standardized way for nodes to communicate with each other.
+
+### MCP-Enabled Demo
+
+To run the MCP-enabled demo:
+
+```bash
+# Install the required dependencies
+pip install -r requirements.txt
+
+# Run the MCP-enabled demo
+python -m demo.run_mcp_demo
+```
+
+### MCP Components
+
+The MCP integration includes the following components:
+
+- **MCPNode**: A base class that extends the Node class with MCP support
+- **GaiaNodeMCPServer**: A wrapper that exposes a Gaia Network node's functionality through MCP
+- **GaiaNodeMCPClient**: A client for communicating with other Gaia Network nodes using MCP
+- **MCP-enabled model nodes**: MCP-enabled versions of the model nodes used in the demo
+
+### MCP Proxy
+
+The implementation uses the MCP Proxy package to enable running multiple MCP servers on a single machine. The MCP Proxy allows:
+
+1. Running multiple MCP servers on different ports
+2. Exposing stdio-based MCP servers as SSE servers
+3. Connecting to remote SSE servers via stdio
+
+Each Gaia node starts its own MCP server using the MCP Proxy, which allows other nodes to connect to it via the SSE protocol.
+
+### Testing MCP Functionality
+
+To test the MCP functionality:
+
+```bash
+# Run the MCP tests
+python -m tests.test_mcp
+```
+
 ## Troubleshooting
 
 If you encounter any issues:
