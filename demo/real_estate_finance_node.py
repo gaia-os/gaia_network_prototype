@@ -78,7 +78,8 @@ class RealEstateFinanceNode(Node):
         super().__init__(
             name="Real Estate Finance Model",
             description="Models project finance for a real estate development",
-            schema=schema
+            schema=schema,
+            id="real_estate_finance_model"
         )
     
     def _handle_posterior_query(self, query: Query) -> QueryResponse:
