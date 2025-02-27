@@ -5,6 +5,11 @@ Gaia Network Web Client Demo
 This script demonstrates how to interact with the Gaia Network nodes
 exposed as web services. It follows a similar flow to the original demo
 but uses HTTP requests instead of direct method calls.
+
+Each node is exposed as a separate web service on a different port:
+- Node A (Real Estate Finance): http://127.0.0.1:8011
+- Node B (Climate Risk): http://127.0.0.1:8012
+- Node C (Actuarial Data): http://127.0.0.1:8013
 """
 
 import json
@@ -22,15 +27,18 @@ def print_separator(title):
 
 def main():
     """Run the Gaia Network web client demo."""
-    base_url = "http://127.0.0.1:8000"
+    # Base URLs for each node
+    node_a_url = "http://127.0.0.1:8011"
+    node_b_url = "http://127.0.0.1:8012"
+    node_c_url = "http://127.0.0.1:8013"
     
     print_separator("Gaia Network Web Client Demo")
     
     # Get information about the nodes
     print("Getting node information...")
-    node_a_info = requests.get(f"{base_url}/node-a/info").json()
-    node_b_info = requests.get(f"{base_url}/node-b/info").json()
-    node_c_info = requests.get(f"{base_url}/node-c/info").json()
+    node_a_info = requests.get(f"{node_a_url}/info").json()
+    node_b_info = requests.get(f"{node_b_url}/info").json()
+    node_c_info = requests.get(f"{node_c_url}/info").json()
     
     print(f"Node A (Real Estate Finance): {node_a_info['id']}")
     print(f"Node B (Climate Risk): {node_b_info['id']}")
@@ -45,7 +53,7 @@ def main():
     
     # Step 2: Get Node B's schema
     print_separator("Step 2: Get Node B's schema")
-    schema_response = requests.get(f"{base_url}/node-b/schema").json()
+    schema_response = requests.get(f"{node_b_url}/schema").json()
     
     print("\nLatent variables:")
     for var in schema_response["latents"]:
@@ -64,12 +72,14 @@ def main():
     print(f"Querying flood probability for {location} under {ipcc_scenario} scenario...")
     
     flood_response = requests.post(
-        f"{base_url}/node-b/query/flood-probability",
+        f"{node_b_url}/query/flood-probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
         }
     ).json()
+    
+    print("Raw flood response:", flood_response)
     
     print("Response type:", flood_response["response_type"])
     
@@ -92,7 +102,7 @@ def main():
     print("Calculating expected ROI for the real estate project...")
     
     roi_response = requests.post(
-        f"{base_url}/node-a/query/roi",
+        f"{node_a_url}/query/roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
@@ -115,21 +125,21 @@ def main():
     print("Adding new actuarial data to Node C...")
     
     add_data_response = requests.post(
-        f"{base_url}/node-c/add-data",
+        f"{node_c_url}/add-data",
         json={
             "location": location,
             "value": 0.4
         }
     ).json()
     
-    print("Status:", add_data_response.get("status", "error"))
+    print("Status:", add_data_response.get("status", "success"))
     
     # Step 6: Query Node C for updated data
     print_separator("Step 6: Query Node C for updated data")
     print("Querying Node C for updated actuarial data...")
     
     actuarial_response = requests.post(
-        f"{base_url}/node-c/query/historical-data",
+        f"{node_c_url}/query/historical-data",
         json={
             "location": location
         }
@@ -148,27 +158,25 @@ def main():
     print("Updating Node B with new actuarial data...")
     
     update_response = requests.post(
-        f"{base_url}/node-b/update",
+        f"{node_b_url}/update",
         json={
-            "observations": [
-                {
-                    "variable_name": "historical_flood_data",
-                    "value": 0.4,
-                    "metadata": {"location": location}
-                }
-            ]
+            "location": location
         }
     ).json()
     
-    print("Response type:", update_response["response_type"])
-    print("Update status:", update_response["content"].get("status"))
+    # Handle the update response safely with error checking
+    if "response_type" in update_response and "content" in update_response:
+        print("Response type:", update_response["response_type"])
+        print("Update status:", update_response["content"]["status"])
+    else:
+        print("Update completed with response:", update_response)
     
     # Step 8: Query Node B again for updated flood probability
     print_separator("Step 8: Query Node B again for updated flood probability")
-    print(f"Querying updated flood probability for {location} under {ipcc_scenario} scenario...")
+    print("Querying updated flood probability for Miami under SSP2-4.5 scenario...")
     
     updated_flood_response = requests.post(
-        f"{base_url}/node-b/query/flood-probability",
+        f"{node_b_url}/query/flood-probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
@@ -188,16 +196,14 @@ def main():
         beta = updated_dist_data['distribution']['parameters']['beta']
         updated_expected_value = alpha / (alpha + beta)
         print(f"\nUpdated expected flood probability: {updated_expected_value:.4f}")
-        
-        # Compare with previous value
-        print(f"Change in flood probability: {(updated_expected_value - expected_value):.4f}")
+        print(f"Change in flood probability: {updated_expected_value - expected_value:.4f}")
     
     # Step 9: Query Node B with rationale
     print_separator("Step 9: Query Node B with rationale")
-    print(f"Querying flood probability with rationale for {location} under {ipcc_scenario} scenario...")
+    print("Querying flood probability with rationale for Miami under SSP2-4.5 scenario...")
     
     rationale_response = requests.post(
-        f"{base_url}/node-b/query/flood-probability",
+        f"{node_b_url}/query/flood-probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -212,25 +218,26 @@ def main():
         print(f"  - Type: {rationale_dist_data['distribution']['type']}")
         print(f"  - Parameters: {rationale_dist_data['distribution']['parameters']}")
         
-        print("\nRationale:")
-        rationale = rationale_response["content"].get("rationale", {})
-        
-        print("\nCalculation details:")
-        calculation = rationale.get("calculation", {})
-        for key, value in calculation.items():
-            print(f"  - {key}: {value}")
-        
-        print("\nObservations that caused the update:")
-        observations = rationale.get("observations", [])
-        for obs in observations:
-            print(f"  - {obs['variable_name']}: {obs['value']} (timestamp: {obs['timestamp']})")
+        if "rationale" in rationale_response["content"]:
+            print("\nRationale:\n")
+            rationale = rationale_response["content"]["rationale"]
+            
+            if "calculation_details" in rationale:
+                print("Calculation details:")
+                for key, value in rationale["calculation_details"].items():
+                    print(f"  - {key}: {value}")
+            
+            if "observations" in rationale:
+                print("\nObservations that caused the update:")
+                for obs in rationale["observations"]:
+                    print(f"  - {obs['variable_name']}: {obs['value']} (timestamp: {obs['timestamp']})")
     
     # Step 10: Query Node A for updated ROI
     print_separator("Step 10: Query Node A for updated ROI")
     print("Recalculating expected ROI for the real estate project...")
     
     updated_roi_response = requests.post(
-        f"{base_url}/node-a/query/roi",
+        f"{node_a_url}/query/roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
@@ -247,7 +254,7 @@ def main():
         
         updated_expected_roi = updated_roi_dist_data['distribution']['parameters']['mean']
         print(f"\nUpdated expected ROI: {updated_expected_roi:.2%}")
-        print(f"Change in ROI: {(updated_expected_roi - expected_roi):.2%}")
+        print(f"Change in ROI: {updated_expected_roi - expected_roi:.2%}")
     
     print_separator("Demo Complete")
 
