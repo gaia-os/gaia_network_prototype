@@ -42,10 +42,11 @@ gaia_network_prototype/
 │   ├── schema.py            # State space schema
 │   └── state.py             # Node state
 ├── demo/                    # Demo implementation
-│   ├── model_nodes.py       # Specific node implementations
-│   ├── real_estate_finance_node.py # Node A implementation
-│   ├── climate_risk_node.py # Node B implementation
-│   ├── actuarial_data_node.py # Node C implementation
+│   ├── model_nodes.py       # Specific node implementations and factory functions
+│   ├── node_handler.py      # Base class for web service handlers
+│   ├── real_estate_finance_node.py # Node A implementation and handler
+│   ├── climate_risk_node.py # Node B implementation and handler
+│   ├── actuarial_data_node.py # Node C implementation and handler
 │   ├── run_demo.py          # Demo script
 │   ├── run_web_demo.py      # Web services demo
 │   └── web_client_demo.py   # Web client demo
@@ -108,7 +109,7 @@ A web client demo script is provided to demonstrate how to interact with the web
 python -m demo.web_client_demo
 ```
 
-This script follows a similar flow to the original demo but uses HTTP requests instead of direct method calls.
+This script follows a similar flow to the standard demo but uses HTTP requests instead of direct method calls.
 
 ### API Endpoints
 
@@ -176,21 +177,29 @@ The web client demo demonstrates the following workflow:
 ## Implementation Notes
 
 - The prototype uses a simplified model for demonstration purposes
-- The nodes communicate via direct method calls in the standard demo and via HTTP in the web demo
+- The nodes communicate via direct method calls in the standard demo and via HTTP/[ASGI](https://asgi.readthedocs.io/en/latest/) in the web demo
 - The demo uses a simple in-memory registry for node discovery, which would be replaced with a distributed registry in a real implementation
 - The web services implementation uses an object-oriented approach with a base `NodeHandler` class and specialized handler classes for each node type
+- Each node handler is co-located with its node implementation for better code organization
+- The `model_nodes.py` module provides factory functions to create nodes and their handlers
 
 ## Future Improvements
 
-This is a simplified prototype. A full implementation would include:
+This is a simplified prototype. A full implementation will include:
 
 - A distributed registry for node discovery
+- Use of a higher-level protocol rather than low-level HTTP/ASGI. In particular, we see value in adopting [Model Context Protocol](https://github.com/modelcontextprotocol/) and only haven't done so because of the Python MCP SDK's current lack of support for running multiple nodes on the same host
 - Authentication and authorization for node access
-- More sophisticated probabilistic models
+- More sophisticated probabilistic models and inference algorithms
 - A web-based UI for interacting with the network
 - Support for more complex queries and updates
 - Distributed state management
 - Fault tolerance and recovery mechanisms
+- Strategies for reproduction and verification of state posteriors
+- A more complete implementation of the Gaia Ontology
+- Credit assignment for information flow
+- Incentive mechanisms for sharing information
+- Proper distributed networking capabilities
 
 ## Troubleshooting
 
@@ -210,15 +219,3 @@ If you encounter any issues:
 
 - The project uses dataclasses, which require careful ordering of parameters (required parameters must come before parameters with default values)
 - The demo uses a simple in-memory registry for node discovery, which would be replaced with a distributed registry in a real implementation
-
-## Future Improvements
-
-This is a simplified prototype. A full implementation would include:
-
-1. Proper distributed networking capabilities
-2. More sophisticated probabilistic models and inference algorithms
-3. A distributed registry for node discovery
-4. Authentication and authorization mechanisms
-5. A more complete implementation of the Gaia Ontology
-6. Credit assignment for information flow
-7. Incentive mechanisms for sharing information

@@ -16,6 +16,8 @@ from gaia_network.query import Query, QueryResponse
 from gaia_network.distribution import Distribution, NormalDistribution, BetaDistribution, MarginalDistribution
 from gaia_network.registry import register_node
 
+from demo.node_handler import NodeHandler
+
 
 class RealEstateFinanceNode(Node):
     """
@@ -161,3 +163,56 @@ class RealEstateFinanceNode(Node):
             response_type="error",
             content={"error": f"Unsupported variable: {variable_name}"}
         )
+
+
+class RealEstateFinanceHandler(NodeHandler):
+    """Handler for the Real Estate Finance node (Node A)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node A based on variable_name and covariates."""
+        if variable_name == "roi":
+            return self._query_roi(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_roi(self, covariates):
+        """Query Node A for expected ROI."""
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        
+        # Import here to avoid circular imports
+        from demo.model_nodes import get_node_by_id
+        
+        # Get Node B
+        node_b = get_node_by_id("climate_risk_model")
+        
+        # Query Node B for flood probability
+        flood_response = self.node.query_posterior(
+            target_node_id=node_b.id,
+            variable_name="flood_probability",
+            covariates={
+                "location": location,
+                "ipcc_scenario": ipcc_scenario
+            }
+        )
+        
+        # Extract the flood probability
+        if flood_response.response_type == "posterior":
+            distribution_data = flood_response.content["distribution"]
+            alpha = distribution_data['distribution']['parameters']['alpha']
+            beta = distribution_data['distribution']['parameters']['beta']
+            flood_probability = alpha / (alpha + beta)
+        else:
+            raise Exception("Failed to get flood probability")
+        
+        # Calculate expected ROI based on flood probability
+        roi_response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="expected_roi",
+            covariates={
+                "location": location,
+                "ipcc_scenario": ipcc_scenario,
+                "flood_probability": flood_probability
+            }
+        )
+        
+        return roi_response.to_dict()

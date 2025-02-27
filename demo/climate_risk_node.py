@@ -17,6 +17,8 @@ from gaia_network.query import Query, QueryResponse
 from gaia_network.distribution import Distribution, NormalDistribution, BetaDistribution, MarginalDistribution
 from gaia_network.registry import register_node
 
+from demo.node_handler import NodeHandler
+
 
 class ClimateRiskNode(Node):
     """
@@ -229,3 +231,88 @@ class ClimateRiskNode(Node):
             response_type="update",
             content={"status": "success"}
         )
+
+
+class ClimateRiskHandler(NodeHandler):
+    """Handler for the Climate Risk node (Node B)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node B based on variable_name and covariates."""
+        if variable_name == "flood-probability":
+            return self._query_flood_probability(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_flood_probability(self, covariates):
+        """Query Node B for flood probability."""
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        rationale = covariates.get("rationale", False)
+        
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="flood_probability",
+            covariates={
+                "location": location,
+                "ipcc_scenario": ipcc_scenario
+            },
+            rationale=rationale
+        )
+        
+        return response.to_dict()
+    
+    def update(self, data):
+        """Update Node B with new observations."""
+        location = data.get("location", "Miami")
+        
+        # Import here to avoid circular imports
+        from demo.model_nodes import get_node_by_id
+        
+        # Get Node C
+        node_c = get_node_by_id("actuarial_data_service")
+        
+        # Query Node C for historical flood data
+        historical_response = self.node.query_posterior(
+            target_node_id=node_c.id,
+            variable_name="historical_flood_data",
+            covariates={"location": location}
+        )
+        
+        if historical_response.response_type != "posterior":
+            raise Exception("Failed to get historical data")
+            
+        # Extract the historical data value from the distribution
+        historical_data = None
+        if hasattr(historical_response, 'distribution') and historical_response.distribution:
+            historical_data = historical_response.distribution.expected_value()
+        else:
+            # If we can't get the distribution, try to extract from content
+            content = getattr(historical_response, 'content', {})
+            if isinstance(content, dict) and 'distribution' in content:
+                dist_data = content['distribution']
+                if 'distribution' in dist_data and 'parameters' in dist_data['distribution']:
+                    params = dist_data['distribution']['parameters']
+                    if 'mean' in params:
+                        historical_data = params['mean']
+        
+        if historical_data is None:
+            raise Exception("Could not extract historical data value")
+        
+        # Update Node B with the historical data
+        self.node.send_update(
+            target_node_id=self.node.id,
+            observations=[
+                {
+                    "variable_name": "historical_flood_data",
+                    "value": historical_data,
+                    "metadata": {"location": location}
+                }
+            ]
+        )
+        
+        # Return a standardized response
+        return {
+            "response_type": "update",
+            "content": {
+                "status": "success"
+            }
+        }

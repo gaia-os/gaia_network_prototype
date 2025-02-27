@@ -15,6 +15,7 @@ from gaia_network.state import State, Observation, StateCheckpoint
 from gaia_network.query import Query, QueryResponse
 from gaia_network.distribution import Distribution, NormalDistribution, BetaDistribution, MarginalDistribution
 from gaia_network.registry import register_node
+from demo.node_handler import NodeHandler
 
 
 class ActuarialDataNode(Node):
@@ -112,3 +113,37 @@ class ActuarialDataNode(Node):
         )
         
         self.state.add_observation(observation)
+
+
+class ActuarialDataHandler(NodeHandler):
+    """Handler for the Actuarial Data node (Node C)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node C based on variable_name and covariates."""
+        if variable_name == "historical-data":
+            return self._query_historical_data(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_historical_data(self, covariates):
+        """Query Node C for historical flood data."""
+        location = covariates.get("location", "Miami")
+        
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="historical_flood_data",
+            covariates={"location": location}
+        )
+        
+        return response.to_dict()
+    
+    def add_data(self, data):
+        """Add new data to Node C."""
+        location = data.get("location", "Miami")
+        value = data.get("value", 0.4)
+        self.node.add_new_data(location=location, value=value)
+        return {
+            "response_type": "update",
+            "content": {
+                "status": "success"
+            }
+        }
