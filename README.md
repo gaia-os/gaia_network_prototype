@@ -197,8 +197,9 @@ This is a simplified prototype. A full implementation will include:
 - Fault tolerance and recovery mechanisms
 - Strategies for reproduction and verification of state posteriors
 - A more complete implementation of the Gaia Ontology
-- Credit assignment for information flow
-- Incentive mechanisms for sharing information
+- Free energy-based credit assignment for information flow
+- Free energy-based model management
+- Free energy-based incentive mechanisms for sharing information
 - Proper distributed networking capabilities
 
 ## Troubleshooting
