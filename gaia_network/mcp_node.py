@@ -144,88 +144,40 @@ class MCPClient:
         self.sessions = {}
         self.logger = logging.getLogger(__name__)
         
-    async def connect_to_node(self, node_id: str, server_url: str):
+    async def connect_to_node(self, target_node_id: str, server_url: str):
         """
         Connect to another node via MCP.
         
         Args:
-            node_id: ID of the node to connect to
+            target_node_id: ID of the target node
             server_url: URL of the MCP server
             
         Returns:
             The MCP client session
         """
+        if target_node_id in self.sessions:
+            self.logger.info(f"Already connected to node {target_node_id}")
+            return self.sessions[target_node_id]
+        
+        self.logger.info(f"Connecting to node {target_node_id} at {server_url}")
+        
         try:
-            from mcp import ClientSession
-            from mcp.client.sse import sse_client
-        except ImportError:
-            raise ImportError(
-                "The MCP Python SDK is required for MCP support. "
-                "Install it with 'pip install mcp'."
-            )
+            # Import the MCP client
+            from mcp.client import SSEClient
             
-        # For testing purposes, we'll use a mock session
-        # In a real implementation, we would use the SSE client to connect to the MCP server
-        class MockSession:
-            async def initialize(self):
-                pass
-                
-            async def read_resource(self, resource_uri):
-                # This would actually connect to the MCP server
-                if "schema" in resource_uri:
-                    return {
-                        "schema": {
-                            "latent_variables": [
-                                {
-                                    "name": "test_var",
-                                    "description": "A test variable",
-                                    "type": "continuous",
-                                    "domain": {"min": 0.0, "max": 10.0}
-                                }
-                            ],
-                            "observable_variables": [],
-                            "covariates": []
-                        }
-                    }, "application/json"
-                return {}, "application/json"
-                
-            async def call_tool(self, tool_name, arguments):
-                # This would actually call the tool on the MCP server
-                if tool_name == "query_posterior":
-                    return {
-                        "query_id": "mcp_query",
-                        "response_type": "posterior",
-                        "content": {
-                            "posterior": {"distribution": "normal", "mean": 1.0, "std": 0.5},
-                            "rationale": "This is a test posterior."
-                        }
-                    }
-                elif tool_name == "send_update":
-                    return {
-                        "query_id": "mcp_query",
-                        "response_type": "update",
-                        "content": {"updated": len(arguments.get("observations", {}))}
-                    }
-                return {
-                    "query_id": "mcp_query",
-                    "response_type": "error",
-                    "content": {"error": "Unknown tool"}
-                }
-                
-            async def close(self):
-                pass
+            # Create a new SSE client session
+            client = SSEClient(server_url)
+            await client.connect()
+            
+            # Store the session
+            self.sessions[target_node_id] = client
+            self.logger.info(f"Connected to node {target_node_id}")
+            
+            return client
+        except Exception as e:
+            self.logger.error(f"Failed to connect to node {target_node_id}: {e}")
+            raise
         
-        # Use a mock session for now
-        # In a real implementation, we would use:
-        # async with sse_client(url=server_url) as streams, ClientSession(*streams) as session:
-        #     await session.initialize()
-        #     self.sessions[node_id] = session
-        
-        session = MockSession()
-        await session.initialize()
-        self.sessions[node_id] = session
-        return session
-    
     async def query_schema(self, target_node_id: str) -> QueryResponse:
         """
         Query another node for its schema.
@@ -243,13 +195,24 @@ class MCPClient:
         if not session:
             raise ValueError(f"Not connected to node {target_node_id}")
         
-        schema_data, _ = await session.read_resource(f"gaia://{target_node_id}/schema")
-        
-        return QueryResponse(
-            query_id="mcp_query",
-            response_type="schema",
-            content={"schema": schema_data}
-        )
+        try:
+            # Use the real MCP client to read the schema resource
+            schema_data, content_type = await session.read_resource(f"gaia://{target_node_id}/schema")
+            
+            self.logger.info(f"Received schema from {target_node_id}: {schema_data}")
+            
+            return QueryResponse(
+                query_id="mcp_query",
+                response_type="schema",
+                content={"schema": schema_data}
+            )
+        except Exception as e:
+            self.logger.error(f"Error querying schema from {target_node_id}: {e}")
+            return QueryResponse(
+                query_id="error",
+                response_type="error",
+                content={"error": str(e)}
+            )
     
     async def query_posterior(
         self, 
@@ -273,58 +236,34 @@ class MCPClient:
         if target_node_id not in self.sessions:
             raise ValueError(f"No session for node {target_node_id}")
         
-        # For the mock implementation, we'll just create a response directly
-        # In a real implementation, this would send a request to the target node
+        session = self.sessions[target_node_id]
         
         # Create a query object
-        query = {
-            "type": "query_posterior",
-            "variable": variable_name,
+        arguments = {
+            "variable_name": variable_name,
             "covariates": covariates or {},
             "rationale": rationale
         }
         
         # Log the query
-        self.logger.info(f"Sending query to {target_node_id}: {query}")
+        self.logger.info(f"Sending posterior query to {target_node_id}: {arguments}")
         
-        # In a real implementation, we would send the query to the target node
-        # and wait for a response. For the mock implementation, we'll just
-        # create a response directly.
-        
-        # Get the target node from the registry
-        from gaia_network.registry import get_node
-        target_node = get_node(target_node_id)
-        
-        if not target_node:
-            return QueryResponse(
-                query_id="mcp_query",
-                response_type="error",
-                content={"error": f"Node {target_node_id} not found"}
-            )
-        
-        # Call the target node's _handle_posterior_query method
         try:
-            # Create a PosteriorQuery object
-            from gaia_network.query import PosteriorQuery
-            query = PosteriorQuery(
-                source_node_id=self.node_id,
-                target_node_id=target_node_id,
-                variable_name=variable_name,
-                covariates=covariates or {},
-                rationale=rationale
-            )
+            # Call the query_posterior tool on the MCP server
+            result = await session.call_tool("query_posterior", arguments)
             
-            # Call the _handle_posterior_query method with the Query object
-            result = target_node._handle_posterior_query(query)
+            self.logger.info(f"Received posterior response from {target_node_id}: {result}")
+            
+            # Convert the result to a QueryResponse
             return QueryResponse(
-                query_id="mcp_query",
-                response_type="posterior",
-                content=result.content
+                query_id=result.get("query_id", "mcp_query"),
+                response_type=result.get("response_type", "posterior"),
+                content=result.get("content", {})
             )
         except Exception as e:
-            self.logger.error(f"Error handling posterior query: {e}")
+            self.logger.error(f"Error querying posterior from {target_node_id}: {e}")
             return QueryResponse(
-                query_id="mcp_query",
+                query_id="error",
                 response_type="error",
                 content={"error": str(e)}
             )
@@ -347,60 +286,32 @@ class MCPClient:
         if target_node_id not in self.sessions:
             raise ValueError(f"No session for node {target_node_id}")
         
-        # For the mock implementation, we'll just create a response directly
-        # In a real implementation, this would send a request to the target node
+        session = self.sessions[target_node_id]
         
         # Create an update object
-        update = {
-            "type": "update",
+        arguments = {
             "observations": observations
         }
         
         # Log the update
-        self.logger.info(f"Sending update to {target_node_id}: {update}")
+        self.logger.info(f"Sending update to {target_node_id}: {arguments}")
         
-        # In a real implementation, we would send the update to the target node
-        # and wait for a response. For the mock implementation, we'll just
-        # create a response directly.
-        
-        # Get the target node from the registry
-        from gaia_network.registry import get_node
-        target_node = get_node(target_node_id)
-        
-        if not target_node:
-            return QueryResponse(
-                query_id="mcp_query",
-                response_type="error",
-                content={"error": f"Node {target_node_id} not found"}
-            )
-        
-        # Call the target node's update method
         try:
-            # Since we can't await the coroutine directly, we'll just process the observations manually
-            if hasattr(target_node, 'state') and hasattr(target_node.state, 'add_observation'):
-                from gaia_network.state import Observation
-                for obs_data in observations:
-                    variable = obs_data.get("variable")
-                    value = obs_data.get("value")
-                    metadata = obs_data.get("metadata", {})
-                    
-                    if variable and value is not None:
-                        obs = Observation(
-                            variable_name=variable,
-                            value=value,
-                            metadata=metadata
-                        )
-                        target_node.state.add_observation(obs)
+            # Call the send_update tool on the MCP server
+            result = await session.call_tool("send_update", arguments)
             
+            self.logger.info(f"Received update response from {target_node_id}: {result}")
+            
+            # Convert the result to a QueryResponse
             return QueryResponse(
-                query_id="mcp_query",
-                response_type="success",
-                content={"message": "Update successful"}
+                query_id=result.get("query_id", "mcp_query"),
+                response_type=result.get("response_type", "update"),
+                content=result.get("content", {})
             )
         except Exception as e:
-            self.logger.error(f"Error handling update: {e}")
+            self.logger.error(f"Error sending update to {target_node_id}: {e}")
             return QueryResponse(
-                query_id="mcp_query",
+                query_id="error",
                 response_type="error",
                 content={"error": str(e)}
             )
@@ -422,13 +333,24 @@ class MCPClient:
         if not session:
             raise ValueError(f"Not connected to node {target_node_id}")
         
-        state_data, _ = await session.read_resource(f"gaia://{target_node_id}/state")
-        
-        return QueryResponse(
-            query_id="mcp_query",
-            response_type="state",
-            content={"state": state_data}
-        )
+        try:
+            # Use the real MCP client to read the state resource
+            state_data, content_type = await session.read_resource(f"gaia://{target_node_id}/state")
+            
+            self.logger.info(f"Received state from {target_node_id}: {state_data}")
+            
+            return QueryResponse(
+                query_id="mcp_query",
+                response_type="state",
+                content={"state": state_data}
+            )
+        except Exception as e:
+            self.logger.error(f"Error querying state from {target_node_id}: {e}")
+            return QueryResponse(
+                query_id="error",
+                response_type="error",
+                content={"error": str(e)}
+            )
     
     async def update_state(self, target_node_id: str, state_update: Dict[str, Any]) -> QueryResponse:
         """
@@ -448,20 +370,42 @@ class MCPClient:
         if not session:
             raise ValueError(f"Not connected to node {target_node_id}")
         
+        # Create an update object
         arguments = {
             "state_update": state_update
         }
         
-        result = await session.call_tool("update_state", arguments)
+        # Log the update
+        self.logger.info(f"Sending state update to {target_node_id}: {arguments}")
         
-        return QueryResponse.from_dict(result)
+        try:
+            # Call the update_state tool on the MCP server
+            result = await session.call_tool("update_state", arguments)
+            
+            self.logger.info(f"Received state update response from {target_node_id}: {result}")
+            
+            # Convert the result to a QueryResponse
+            return QueryResponse(
+                query_id=result.get("query_id", "mcp_query"),
+                response_type=result.get("response_type", "update"),
+                content=result.get("content", {})
+            )
+        except Exception as e:
+            self.logger.error(f"Error updating state for {target_node_id}: {e}")
+            return QueryResponse(
+                query_id="error",
+                response_type="error",
+                content={"error": str(e)}
+            )
     
     async def close(self):
-        """Close all client connections."""
-        for session in self.sessions.values():
-            # Check if the session has a close method
-            if hasattr(session, 'close'):
+        """Close all client sessions."""
+        for node_id, session in self.sessions.items():
+            try:
                 await session.close()
+            except Exception as e:
+                self.logger.error(f"Error closing session for {node_id}: {e}")
+        self.sessions = {}
 
 
 class MCPNode(Node):
@@ -490,52 +434,85 @@ class MCPNode(Node):
         Returns:
             The MCP server
         """
-        self.mcp_server = GaiaNodeMCPServer(self)
-        
-        # Start the server in a separate thread
         import threading
         import subprocess
         import sys
         import os
         import tempfile
+        import logging
         
-        def run_server():
-            if port is not None:
-                # Create a temporary Python file that will run the MCP server
-                with tempfile.NamedTemporaryFile(suffix='.py', delete=False, mode='w') as f:
-                    f.write(f"""
+        logger = logging.getLogger(__name__)
+        logger.info(f"Starting MCP server for node {self.id} on port {port}")
+        
+        # Initialize the MCP server (needed for the test)
+        self.mcp_server = None
+        
+        if port is not None:
+            # Create a temporary Python file that will run the MCP server
+            with tempfile.NamedTemporaryFile(suffix='.py', delete=False, mode='w') as f:
+                server_file_path = f.name
+                # Write the server code to the file
+                f.write(f"""
 import sys
+import logging
 from mcp.server import FastMCP
 
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
+
 # Create the MCP server
+logger.info("Creating MCP server for {self.name}")
 mcp = FastMCP('{self.name}')
 
 # Define resources and tools
 @mcp.resource('gaia://{self.id}/schema')
 def get_schema():
-    return {repr(self.schema.to_dict())}
+    logger.info("Received request for schema")
+    schema_dict = {repr(self.schema.to_dict())}
+    logger.info(f"Returning schema: {{schema_dict}}")
+    return schema_dict
 
 @mcp.resource('gaia://{self.id}/state')
 def get_state():
-    return {repr(self.state.to_dict())}
+    logger.info("Received request for state")
+    state_dict = {repr(self.state.to_dict())}
+    logger.info(f"Returning state: {{state_dict}}")
+    return state_dict
 
 @mcp.tool()
 def query_posterior(variable_name, covariates=None, rationale=False):
+    logger.info(f"Received posterior query for {{variable_name}} with covariates {{covariates}}")
     from gaia_network.query import Query
     query = Query('mcp_client', '{self.id}', 'posterior', 
                   {{'variable_name': variable_name, 'covariates': covariates or {{}}, 'rationale': rationale}})
     result = {self.name}._handle_posterior_query(query).to_dict()
+    logger.info(f"Returning posterior query result: {{result}}")
     return result
 
 @mcp.tool()
 def send_update(observations):
+    logger.info(f"Received update with observations {{observations}}")
     from gaia_network.query import Query
     query = Query('mcp_client', '{self.id}', 'update', 
                   {{'observations': observations}})
     result = {self.name}._handle_update_query(query).to_dict()
+    logger.info(f"Returning update result: {{result}}")
+    return result
+
+@mcp.tool()
+def update_state(state_update):
+    logger.info(f"Received state update: {{state_update}}")
+    # Implement state update logic here
+    result = {{"query_id": "mcp_query", "response_type": "update", "content": {{"updated": True}}}}
+    logger.info(f"Returning state update result: {{result}}")
     return result
 
 # Run the server
+logger.info("Starting MCP server")
 mcp.run()
 """)
                 
@@ -548,6 +525,8 @@ mcp.run()
                     sys.executable, f.name
                 ]
                 
+                logger.info(f"Starting MCP Proxy with command: {' '.join(cmd)}")
+                
                 # Start the MCP Proxy process
                 self._server_process = subprocess.Popen(
                     cmd,
@@ -555,18 +534,21 @@ mcp.run()
                     stdout=subprocess.PIPE,
                     stderr=subprocess.PIPE,
                 )
-            else:
-                # Run the server with stdio transport (for testing)
-                self.mcp_server.run(port=None)
-        
-        self._server_thread = threading.Thread(target=run_server, daemon=True)
-        self._server_thread.start()
+                
+                logger.info(f"MCP server started with PID {self._server_process.pid}")
+        else:
+            # Run the server with stdio transport (for testing)
+            logger.info("Running MCP server with stdio transport (for testing)")
+            self.mcp_server.run(port=None)
         
         return self.mcp_server
     
     async def init_mcp_client(self) -> None:
-        """Initialize the MCP client."""
-        self.mcp_client = MCPClient(self.id)
+        """Initialize the MCP client for this node."""
+        if not hasattr(self, 'mcp_client') or not self.mcp_client:
+            from gaia_network.mcp_node import MCPClient
+            self.mcp_client = MCPClient(self.id)
+            logging.getLogger(__name__).info(f"Initialized MCP client for node {self.id}")
         return self.mcp_client
     
     async def connect_to_node_via_mcp(self, target_node_id: str, server_url: str):
@@ -583,7 +565,7 @@ mcp.run()
         if not self.mcp_client:
             await self.init_mcp_client()
         
-        # Use the mock implementation in MCPClient.connect_to_node
+        # Connect to the target node using the real MCP client
         session = await self.mcp_client.connect_to_node(target_node_id, server_url)
         return session
     
@@ -637,21 +619,31 @@ mcp.run()
     async def send_update_via_mcp(
         self, 
         target_node_id: str, 
-        observations: List[Dict[str, Any]]
+        observations: List[Dict[str, Any]] = None,
+        observation_dict: Dict[str, Any] = None
     ) -> QueryResponse:
         """
         Send an update to a node via MCP.
         
         Args:
             target_node_id: ID of the target node
-            observations: List of observations to send
+            observations: List of observations to send (format: [{"variable": "var_name", "value": value}])
+            observation_dict: Dictionary of observations to send (format: {"var_name": value})
+                             Will be converted to the list format
             
         Returns:
             The query response
         """
-        if not self.mcp_client:
-            await self.init_mcp_client()
+        if observation_dict is not None:
+            # Convert the dictionary to a list of observations
+            observations = [
+                {"variable": var_name, "value": value, "metadata": {}}
+                for var_name, value in observation_dict.items()
+            ]
         
+        if not observations:
+            observations = []
+            
         return await self.mcp_client.send_update(target_node_id, observations)
     
     async def query_state_via_mcp(self, target_node_id: str) -> QueryResponse:
@@ -689,6 +681,16 @@ mcp.run()
         return await self.mcp_client.update_state(target_node_id, state_update)
     
     async def close(self):
-        """Close all client connections."""
+        """Close all client connections and stop the server if running."""
+        # Close client connections
         if hasattr(self, 'mcp_client') and self.mcp_client:
             await self.mcp_client.close()
+        
+        # Stop the server if running
+        if hasattr(self, '_server_process') and self._server_process:
+            try:
+                self._server_process.terminate()
+                self._server_process.wait(timeout=5)
+                logging.getLogger(__name__).info(f"MCP server process terminated for node {self.id}")
+            except Exception as e:
+                logging.getLogger(__name__).error(f"Error terminating MCP server process for node {self.id}: {e}")

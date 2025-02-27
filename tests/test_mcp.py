@@ -141,9 +141,12 @@ async def main():
     logger.info(f"Update response: {update_response.content}")
     
     # Clean up
+    logger.info("Cleaning up")
     for node in [node1, node2]:
-        if hasattr(node, "_server_process") and node._server_process:
-            node._server_process.terminate()
+        try:
+            await node.close()
+        except Exception as e:
+            logger.error(f"Error closing node: {e}")
     
     logger.info("All tests passed!")
 
@@ -173,8 +176,8 @@ async def test_mcp_server_client():
         
         # Connect nodes to each other
         logger.info("Connecting nodes to each other")
-        await node1.connect_to_node_via_mcp("node2", "http://localhost:8002")
-        await node2.connect_to_node_via_mcp("node1", "http://localhost:8001")
+        await node1.connect_to_node_via_mcp("node2", "http://localhost:8002/sse")
+        await node2.connect_to_node_via_mcp("node1", "http://localhost:8001/sse")
         
         # Test schema query
         logger.info("Testing schema query")
@@ -199,11 +202,14 @@ async def test_mcp_server_client():
     except Exception as e:
         logger.error(f"Error in test: {e}", exc_info=True)
     finally:
-        # Close all MCP clients
-        if node1 and hasattr(node1, "mcp_client") and node1.mcp_client:
-            await node1.mcp_client.close()
-        if node2 and hasattr(node2, "mcp_client") and node2.mcp_client:
-            await node2.mcp_client.close()
+        # Clean up
+        logger.info("Cleaning up")
+        for node in [node1, node2]:
+            if node:
+                try:
+                    await node.close()
+                except Exception as e:
+                    logger.error(f"Error closing node: {e}")
 
 
 if __name__ == "__main__":

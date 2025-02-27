@@ -56,8 +56,7 @@ async def setup_nodes():
     await climate_risk_node.init_mcp_client()
     await actuarial_node.init_mcp_client()
     
-    # Connect nodes to each other using mock connections
-    # This will use the mock implementation in MCPClient.connect_to_node
+    # Connect nodes to each other using real MCP connections
     for node in [re_finance_node, climate_risk_node, actuarial_node]:
         logger.info(f"Connecting node {node.id} to other nodes")
         for target_id, url in get_all_mcp_urls().items():
