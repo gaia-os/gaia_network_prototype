@@ -43,7 +43,12 @@ gaia_network_prototype/
 │   └── state.py             # Node state
 ├── demo/                    # Demo implementation
 │   ├── model_nodes.py       # Specific node implementations
-│   └── run_demo.py          # Demo script
+│   ├── real_estate_finance_node.py # Node A implementation
+│   ├── climate_risk_node.py # Node B implementation
+│   ├── actuarial_data_node.py # Node C implementation
+│   ├── run_demo.py          # Demo script
+│   ├── run_web_demo.py      # Web services demo
+│   └── web_client_demo.py   # Web client demo
 ├── venv/                    # Virtual environment (not in version control)
 └── requirements.txt         # Project dependencies
 ```
@@ -73,25 +78,41 @@ The demo script (`demo/run_demo.py`) demonstrates the following workflow:
 
 ## Running the Demo
 
-To run the demo:
+To run the standard demo:
 
 ```bash
-# Make sure you're in the project root directory
-cd /Users/rkauf/CascadeProjects/gaia_network_prototype
-
-# Activate the virtual environment
-source venv/bin/activate  # On Windows: venv\Scripts\activate
-
-# Run the demo
 python -m demo.run_demo
 ```
 
-The demo will:
-1. Create three nodes (A, B, and C) representing different models
-2. Demonstrate how Node A queries Node B for climate risk data
-3. Show how Node C provides updated actuarial data to Node B
-4. Demonstrate how Node B updates its internal state based on new data
-5. Show how Node A gets updated information from Node B, including the rationale for the changes
+This will demonstrate the interaction between the three nodes, showing how they share information and update their beliefs based on observations.
+
+## Web Services
+
+The Gaia Network nodes can also be exposed as web services using the Starlette ASGI framework.
+
+### Running the Web Services
+
+To start the web server:
+
+```bash
+python -m demo.run_web_demo
+```
+
+The server will start at `http://127.0.0.1:8000` and expose the three nodes as REST API endpoints.
+
+### Web Client Demo
+
+A web client demo script is provided to demonstrate how to interact with the web services:
+
+```bash
+python -m demo.web_client_demo
+```
+
+This script follows a similar flow to the original demo but uses HTTP requests instead of direct method calls.
+
+### API Endpoints
+
+Each node provides endpoints for querying its schema, getting information about the node, and performing node-specific operations. For detailed API documentation, see [demo/WEB_DEMO_README.md](demo/WEB_DEMO_README.md).
 
 ## Troubleshooting
 
