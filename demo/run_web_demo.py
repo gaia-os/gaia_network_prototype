@@ -31,30 +31,72 @@ from demo.model_nodes import create_demo_nodes
 node_a, node_b, node_c = create_demo_nodes()
 
 
-# Node A routes
-async def node_a_info(request):
-    """Return information about Node A."""
-    return JSONResponse({
-        "id": node_a.id,
-        "name": node_a.name,
-        "description": node_a.description
-    })
+# Business Logic Classes
+
+class NodeHandler:
+    """Base class for handling node operations."""
+    
+    def __init__(self, node):
+        self.node = node
+    
+    def get_info(self):
+        """Return information about the node."""
+        return {
+            "id": self.node.id,
+            "name": self.node.name,
+            "description": self.node.description
+        }
+    
+    def get_schema(self):
+        """Return the schema of the node."""
+        return self.node.schema.to_dict()
+    
+    def query(self, variable_name, covariates):
+        """Query the node based on variable_name and covariates."""
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name=variable_name,
+            covariates=covariates
+        )
+        return response.to_dict()
+    
+    def update(self, data):
+        """Update the node with new observations."""
+        observations = data.get("observations", [])
+        self.node.send_update(
+            target_node_id=self.node.id,
+            observations=observations
+        )
+        return {
+            "response_type": "update",
+            "content": {
+                "status": "success"
+            }
+        }
+    
+    def add_data(self, data):
+        """Add new data to the node."""
+        return {
+            "error": f"Adding data to node {self.node.id} is not supported"
+        }
 
 
-async def node_a_schema(request):
-    """Return the schema of Node A."""
-    return JSONResponse(node_a.schema.to_dict())
-
-
-async def node_a_query_roi(request):
-    """Query Node A for expected ROI."""
-    try:
-        data = await request.json()
-        location = data.get("location", "Miami")
-        ipcc_scenario = data.get("ipcc_scenario", "SSP2-4.5")
+class RealEstateFinanceHandler(NodeHandler):
+    """Handler for the Real Estate Finance node (Node A)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node A based on variable_name and covariates."""
+        if variable_name == "roi":
+            return self._query_roi(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_roi(self, covariates):
+        """Query Node A for expected ROI."""
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
         
         # Query Node B for flood probability
-        flood_response = node_a.query_posterior(
+        flood_response = self.node.query_posterior(
             target_node_id=node_b.id,
             variable_name="flood_probability",
             covariates={
@@ -70,11 +112,11 @@ async def node_a_query_roi(request):
             beta = distribution_data['distribution']['parameters']['beta']
             flood_probability = alpha / (alpha + beta)
         else:
-            return JSONResponse({"error": "Failed to get flood probability"}, status_code=400)
+            raise Exception("Failed to get flood probability")
         
         # Calculate expected ROI based on flood probability
-        roi_response = node_a.query_posterior(
-            target_node_id=node_a.id,
+        roi_response = self.node.query_posterior(
+            target_node_id=self.node.id,
             variable_name="expected_roi",
             covariates={
                 "location": location,
@@ -83,36 +125,26 @@ async def node_a_query_roi(request):
             }
         )
         
-        return JSONResponse(roi_response.to_dict())
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        return roi_response.to_dict()
 
 
-# Node B routes
-async def node_b_info(request):
-    """Return information about Node B."""
-    return JSONResponse({
-        "id": node_b.id,
-        "name": node_b.name,
-        "description": node_b.description
-    })
-
-
-async def node_b_schema(request):
-    """Return the schema of Node B."""
-    return JSONResponse(node_b.schema.to_dict())
-
-
-async def node_b_query_flood_probability(request):
-    """Query Node B for flood probability."""
-    try:
-        data = await request.json()
-        location = data.get("location", "Miami")
-        ipcc_scenario = data.get("ipcc_scenario", "SSP2-4.5")
-        rationale = data.get("rationale", False)
+class ClimateRiskHandler(NodeHandler):
+    """Handler for the Climate Risk node (Node B)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node B based on variable_name and covariates."""
+        if variable_name == "flood-probability":
+            return self._query_flood_probability(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_flood_probability(self, covariates):
+        """Query Node B for flood probability."""
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        rationale = covariates.get("rationale", False)
         
-        response = node_b.query_posterior(
-            target_node_id=node_b.id,
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
             variable_name="flood_probability",
             covariates={
                 "location": location,
@@ -121,26 +153,21 @@ async def node_b_query_flood_probability(request):
             rationale=rationale
         )
         
-        return JSONResponse(response.to_dict())
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-
-async def node_b_update(request):
-    """Update Node B with new observations."""
-    try:
-        data = await request.json()
+        return response.to_dict()
+    
+    def update(self, data):
+        """Update Node B with new observations."""
         location = data.get("location", "Miami")
         
         # Query Node C for historical flood data
-        historical_response = node_b.query_posterior(
+        historical_response = self.node.query_posterior(
             target_node_id=node_c.id,
             variable_name="historical_flood_data",
             covariates={"location": location}
         )
         
         if historical_response.response_type != "posterior":
-            return JSONResponse({"error": "Failed to get historical data"}, status_code=400)
+            raise Exception("Failed to get historical data")
             
         # Extract the historical data value from the distribution
         historical_data = None
@@ -157,158 +184,196 @@ async def node_b_update(request):
                         historical_data = params['mean']
         
         if historical_data is None:
-            return JSONResponse({"error": "Could not extract historical data value"}, status_code=400)
+            raise Exception("Could not extract historical data value")
         
         # Update Node B with the historical data
-        try:
-            node_b.send_update(
-                target_node_id=node_b.id,
-                observations=[
-                    {
-                        "variable_name": "historical_flood_data",
-                        "value": historical_data,
-                        "metadata": {"location": location}
-                    }
-                ]
-            )
-            
-            # Return a standardized response
-            return JSONResponse({
-                "response_type": "update",
-                "content": {
-                    "status": "success"
+        self.node.send_update(
+            target_node_id=self.node.id,
+            observations=[
+                {
+                    "variable_name": "historical_flood_data",
+                    "value": historical_data,
+                    "metadata": {"location": location}
                 }
-            })
-        except Exception as e:
-            return JSONResponse({"error": f"Failed to update Node B: {str(e)}"}, status_code=400)
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-
-# Node C routes
-async def node_c_info(request):
-    """Return information about Node C."""
-    return JSONResponse({
-        "id": node_c.id,
-        "name": node_c.name,
-        "description": node_c.description
-    })
-
-
-async def node_c_schema(request):
-    """Return the schema of Node C."""
-    return JSONResponse(node_c.schema.to_dict())
-
-
-async def node_c_query_historical_data(request):
-    """Query Node C for historical flood data."""
-    try:
-        data = await request.json()
-        location = data.get("location", "Miami")
-        
-        response = node_c.query_posterior(
-            target_node_id=node_c.id,
-            variable_name="historical_flood_data",
-            covariates={"location": location}
+            ]
         )
         
-        return JSONResponse(response.to_dict())
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
-
-
-async def node_c_add_data(request):
-    """Add new data to Node C."""
-    try:
-        data = await request.json()
-        location = data.get("location", "Miami")
-        value = data.get("value", 0.4)
-        
-        # Directly use the add_new_data method from the original demo
-        node_c.add_new_data(location=location, value=value)
-        
-        # Return a standardized response format
-        return JSONResponse({
+        # Return a standardized response
+        return {
             "response_type": "update",
             "content": {
                 "status": "success"
             }
-        })
-    except Exception as e:
-        return JSONResponse({"error": str(e)}, status_code=400)
+        }
 
+
+class ActuarialDataHandler(NodeHandler):
+    """Handler for the Actuarial Data node (Node C)."""
+    
+    def query(self, variable_name, covariates):
+        """Query Node C based on variable_name and covariates."""
+        if variable_name == "historical-data":
+            return self._query_historical_data(covariates)
+        return super().query(variable_name, covariates)
+    
+    def _query_historical_data(self, covariates):
+        """Query Node C for historical flood data."""
+        location = covariates.get("location", "Miami")
+        
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="historical_flood_data",
+            covariates={"location": location}
+        )
+        
+        return response.to_dict()
+    
+    def add_data(self, data):
+        """Add new data to Node C."""
+        location = data.get("location", "Miami")
+        value = data.get("value", 0.4)
+        self.node.add_new_data(location=location, value=value)
+        return {
+            "response_type": "update",
+            "content": {
+                "status": "success"
+            }
+        }
+
+
+# Create handler instances for each node
+node_a_handler = RealEstateFinanceHandler(node_a)
+node_b_handler = ClimateRiskHandler(node_b)
+node_c_handler = ActuarialDataHandler(node_c)
+
+# Map node IDs to handlers
+node_handlers = {
+    node_a.id: node_a_handler,
+    node_b.id: node_b_handler,
+    node_c.id: node_c_handler
+}
+
+# Business Logic Functions that delegate to the appropriate handler
+
+def get_node_info(node):
+    """Return information about the node."""
+    handler = node_handlers.get(node.id)
+    return handler.get_info()
+
+
+def get_node_schema(node):
+    """Return the schema of the node."""
+    handler = node_handlers.get(node.id)
+    return handler.get_schema()
+
+
+def query_node(node, variable_name, covariates):
+    """Query the node based on variable_name and covariates."""
+    handler = node_handlers.get(node.id)
+    return handler.query(variable_name, covariates)
+
+
+def update_node(node, data):
+    """Update the node with new observations."""
+    handler = node_handlers.get(node.id)
+    return handler.update(data)
+
+
+def add_data_to_node(node, data):
+    """Add new data to the node."""
+    handler = node_handlers.get(node.id)
+    return handler.add_data(data)
+
+
+# Create route handlers for each node
+def create_node_routes(node):
+    """Create route handlers for a specific node."""
+    
+    async def handle_info(request):
+        """Return information about the node."""
+        try:
+            return JSONResponse(get_node_info(node))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    
+    async def handle_schema(request):
+        """Return the schema of the node."""
+        try:
+            return JSONResponse(get_node_schema(node))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    
+    async def handle_query(request):
+        """Query the node for a specific variable."""
+        try:
+            variable_name = request.path_params["variable_name"]
+            data = await request.json()
+            return JSONResponse(query_node(node, variable_name, data))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    
+    async def handle_update(request):
+        """Update the node with new observations."""
+        try:
+            data = await request.json()
+            return JSONResponse(update_node(node, data))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    
+    async def handle_add_data(request):
+        """Add new data to the node."""
+        try:
+            data = await request.json()
+            return JSONResponse(add_data_to_node(node, data))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=400)
+    
+    return [
+        Route("/info", handle_info, methods=["GET"]),
+        Route("/schema", handle_schema, methods=["GET"]),
+        Route("/query/{variable_name}", handle_query, methods=["POST"]),
+        Route("/update", handle_update, methods=["POST"]),
+        Route("/add-data", handle_add_data, methods=["POST"]),
+    ]
 
 # Create middleware for CORS
 middleware = [
     Middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 ]
 
-# Create the Starlette applications with routes
-app_a = Starlette(
-    debug=True,
-    routes=[
-        Route("/info", node_a_info),
-        Route("/schema", node_a_schema),
-        Route("/query/roi", node_a_query_roi, methods=["POST"]),
-    ],
-    middleware=middleware
-)
+# Create separate apps for each node
+apps = []
 
-app_b = Starlette(
-    debug=True,
-    routes=[
-        Route("/info", node_b_info),
-        Route("/schema", node_b_schema),
-        Route("/query/flood-probability", node_b_query_flood_probability, methods=["POST"]),
-        Route("/update", node_b_update, methods=["POST"]),
-    ],
-    middleware=middleware
-)
-
-app_c = Starlette(
-    debug=True,
-    routes=[
-        Route("/info", node_c_info),
-        Route("/schema", node_c_schema),
-        Route("/query/historical-data", node_c_query_historical_data, methods=["POST"]),
-        Route("/add-data", node_c_add_data, methods=["POST"]),
-    ],
-    middleware=middleware
-)
-
+for node, port in zip([node_a, node_b, node_c], [8011, 8012, 8013]):
+    app = Starlette(
+        debug=True,
+        routes=create_node_routes(node),
+        middleware=middleware
+    )
+    apps.append((app, port))
 
 # Run the applications
 class Server:
-    def __init__(self, app, host, port, node_name):
+    def __init__(self, app, host, port):
         self.app = app
         self.host = host
         self.port = port
-        self.node_name = node_name
         self.server = None
     
     async def start(self):
         config = uvicorn.Config(self.app, host=self.host, port=self.port)
         self.server = uvicorn.Server(config)
-        print(f"Starting {self.node_name} server on http://{self.host}:{self.port}")
+        print(f"Starting Gaia Network Web Services on http://{self.host}:{self.port}")
         await self.server.serve()
 
 
-async def main():
-    server_a = Server(app_a, "127.0.0.1", 8011, "Node A (Real Estate Finance)")
-    server_b = Server(app_b, "127.0.0.1", 8012, "Node B (Climate Risk)")
-    server_c = Server(app_c, "127.0.0.1", 8013, "Node C (Actuarial Data)")
-    
+async def run_apps():
+    await asyncio.gather(*[Server(app, "127.0.0.1", port).start() for app, port in apps])
+
+# Run the application
+if __name__ == "__main__":
     print("Starting Gaia Network Web Services")
     print(f"Node A (Real Estate Finance): http://127.0.0.1:8011")
     print(f"Node B (Climate Risk): http://127.0.0.1:8012")
     print(f"Node C (Actuarial Data): http://127.0.0.1:8013")
-    
-    await asyncio.gather(
-        server_a.start(),
-        server_b.start(),
-        server_c.start()
-    )
-
-
-if __name__ == "__main__":
-    asyncio.run(main())
+    asyncio.run(run_apps())

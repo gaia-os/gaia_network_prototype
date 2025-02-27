@@ -76,8 +76,6 @@ The demo script (`demo/run_demo.py`) demonstrates the following workflow:
 9. Node A includes the `rationale=True` parameter in the request, and Node B sends its state history and rationale
 10. Node A recalculates ROI based on the updated flood probability
 
-## Running the Demo
-
 To run the standard demo:
 
 ```bash
@@ -88,17 +86,19 @@ This will demonstrate the interaction between the three nodes, showing how they 
 
 ## Web Services
 
-The Gaia Network nodes can also be exposed as web services using the Starlette ASGI framework.
+The Gaia Network nodes are exposed as web services using the Starlette ASGI framework. Each node runs as a separate service on its own port:
 
-### Running the Web Services
+- **Node A (Real Estate Finance)**: http://127.0.0.1:8011
+- **Node B (Climate Risk)**: http://127.0.0.1:8012
+- **Node C (Actuarial Data)**: http://127.0.0.1:8013
 
-To start the web server:
+### Starting the Web Services
+
+To start the web servers:
 
 ```bash
 python -m demo.run_web_demo
 ```
-
-The server will start at `http://127.0.0.1:8000` and expose the three nodes as REST API endpoints.
 
 ### Web Client Demo
 
@@ -112,7 +112,85 @@ This script follows a similar flow to the original demo but uses HTTP requests i
 
 ### API Endpoints
 
-Each node provides endpoints for querying its schema, getting information about the node, and performing node-specific operations. For detailed API documentation, see [demo/WEB_DEMO_README.md](demo/WEB_DEMO_README.md).
+Each node provides the following RESTful endpoints:
+
+#### Common Endpoints for All Nodes
+
+- `GET /info`: Get information about the node
+- `GET /schema`: Get the schema of the node
+- `POST /update`: Update the node with new observations
+- `POST /query/{variable_name}`: Query the node for a specific variable
+
+#### Node-Specific Endpoints
+
+- **Node A (Real Estate Finance)**:
+  - `POST /query/roi`: Query for expected ROI
+    ```json
+    {
+      "location": "Miami",
+      "ipcc_scenario": "SSP2-4.5"
+    }
+    ```
+
+- **Node B (Climate Risk)**:
+  - `POST /query/flood-probability`: Query for flood probability
+    ```json
+    {
+      "location": "Miami",
+      "ipcc_scenario": "SSP2-4.5",
+      "rationale": false
+    }
+    ```
+
+- **Node C (Actuarial Data)**:
+  - `POST /query/historical-data`: Query for historical flood data
+    ```json
+    {
+      "location": "Miami"
+    }
+    ```
+  - `POST /add-data`: Add new data
+    ```json
+    {
+      "location": "Miami",
+      "value": 0.4
+    }
+    ```
+
+### Example Workflow
+
+The web client demo demonstrates the following workflow:
+
+1. Get information about all three nodes
+2. Set the location (Miami) and IPCC scenario (SSP2-4.5)
+3. Get Node B's schema
+4. Query Node B for flood probability
+5. Query Node A for expected ROI based on the flood probability
+6. Add new actuarial data to Node C
+7. Query Node C for the updated data
+8. Update Node B with the new data
+9. Query Node B again for the updated flood probability
+10. Query Node B with rationale to understand the changes
+11. Query Node A for the updated ROI
+
+## Implementation Notes
+
+- The prototype uses a simplified model for demonstration purposes
+- The nodes communicate via direct method calls in the standard demo and via HTTP in the web demo
+- The demo uses a simple in-memory registry for node discovery, which would be replaced with a distributed registry in a real implementation
+- The web services implementation uses an object-oriented approach with a base `NodeHandler` class and specialized handler classes for each node type
+
+## Future Improvements
+
+This is a simplified prototype. A full implementation would include:
+
+- A distributed registry for node discovery
+- Authentication and authorization for node access
+- More sophisticated probabilistic models
+- A web-based UI for interacting with the network
+- Support for more complex queries and updates
+- Distributed state management
+- Fault tolerance and recovery mechanisms
 
 ## Troubleshooting
 
