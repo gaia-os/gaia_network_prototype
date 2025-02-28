@@ -174,6 +174,145 @@ The web client demo demonstrates the following workflow:
 10. Query Node B with rationale to understand the changes
 11. Query Node A for the updated ROI
 
+This generates the following output:
+
+```
+================================================================================
+========================= Gaia Network Web Client Demo =========================
+================================================================================
+
+Getting node information...
+Node A (Real Estate Finance): real_estate_finance_model
+Node B (Climate Risk): climate_risk_model
+Node C (Actuarial Data): actuarial_data_service
+
+================================================================================
+==================== Step 1: Set location and IPCC scenario ====================
+================================================================================
+
+Location: Miami
+IPCC Scenario: SSP2-4.5
+
+================================================================================
+========================= Step 2: Get Node B's schema ==========================
+================================================================================
+
+
+Latent variables:
+  - sea_level_rise: Projected sea level rise in meters
+  - storm_intensity: Projected storm intensity
+
+Observable variables:
+  - flood_probability: Probability of flooding in the next 50 years
+  - historical_flood_data: Historical flood data
+
+Covariates:
+  - location: City location
+  - ipcc_scenario: IPCC climate scenario
+
+================================================================================
+================== Step 3: Query Node B for flood probability ==================
+================================================================================
+
+Querying flood probability for Miami under SSP2-4.5 scenario...
+Raw flood response: {'query_id': '1b821515-bdef-4f94-a2a3-54b0f8824243', 'response_type': 'posterior', 'content': {'distribution': {'name': 'flood_probability', 'distribution': {'type': 'beta', 'parameters': {'alpha': 12.8, 'beta': 7.199999999999999}}, 'metadata': {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}}}, 'timestamp': '2025-02-27T19:00:12.722367', 'metadata': {}}
+Response type: posterior
+
+Flood probability distribution:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 12.8, 'beta': 7.199999999999999}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}
+
+Expected flood probability: 0.6400
+
+================================================================================
+========================= Step 4: Query Node A for ROI =========================
+================================================================================
+
+Calculating expected ROI for the real estate project...
+
+ROI distribution:
+  - Name: expected_roi
+  - Type: normal
+  - Parameters: {'mean': -0.17, 'std': 0.03}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5', 'flood_probability': 0.64}
+
+Expected ROI: -17.00%
+
+================================================================================
+======================== Step 5: Add new data to Node C ========================
+================================================================================
+
+Adding new actuarial data to Node C...
+Status: success
+
+================================================================================
+==================== Step 6: Query Node C for updated data =====================
+================================================================================
+
+Querying Node C for updated actuarial data...
+
+Actuarial data distribution:
+  - Name: historical_flood_data
+  - Type: normal
+  - Parameters: {'mean': 0.3, 'std': 0.1}
+  - Metadata: {'location': 'Miami'}
+
+================================================================================
+===================== Step 7: Update Node B with new data ======================
+================================================================================
+
+Updating Node B with new actuarial data...
+Response type: update
+Update status: success
+
+================================================================================
+=========== Step 8: Query Node B again for updated flood probability ===========
+================================================================================
+
+Querying updated flood probability for Miami under SSP2-4.5 scenario...
+
+Updated flood probability distribution:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 13.200000000000001, 'beta': 6.799999999999999}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}
+
+Updated expected flood probability: 0.6600
+Change in flood probability: 0.0200
+
+================================================================================
+===================== Step 9: Query Node B with rationale ======================
+================================================================================
+
+Querying flood probability with rationale for Miami under SSP2-4.5 scenario...
+
+Flood probability distribution with rationale:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 13.200000000000001, 'beta': 6.799999999999999}
+
+================================================================================
+==================== Step 10: Query Node A for updated ROI =====================
+================================================================================
+
+Recalculating expected ROI for the real estate project...
+
+Updated ROI distribution:
+  - Name: expected_roi
+  - Type: normal
+  - Parameters: {'mean': -0.18000000000000002, 'std': 0.03}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5', 'flood_probability': 0.66}
+
+Updated expected ROI: -18.00%
+Change in ROI: -1.00%
+
+================================================================================
+================================ Demo Complete =================================
+================================================================================
+```
+
 ## Implementation Notes
 
 - The prototype uses a simplified model for demonstration purposes
