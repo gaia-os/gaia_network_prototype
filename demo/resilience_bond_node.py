@@ -338,9 +338,9 @@ class ResilienceBondHandler(NodeHandler):
     
     def query(self, variable_name, covariates):
         """Query Node D based on variable_name and covariates."""
-        if variable_name == "bond-payoff":
+        if variable_name == "bond_payoff":
             return self._query_bond_payoff(covariates)
-        elif variable_name == "bond-price":
+        elif variable_name == "bond_price":
             return self._query_bond_price(covariates)
         return super().query(variable_name, covariates)
     

@@ -105,7 +105,7 @@ def main():
     print("Calculating expected ROI for the real estate project...")
     
     roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -242,7 +242,7 @@ def main():
     print("Recalculating expected ROI for the real estate project...")
     
     updated_roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -269,7 +269,7 @@ def main():
     # Calculate ROI for BAU
     print("\nCalculating ROI for Business-as-Usual (BAU) strategy...")
     bau_roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -286,7 +286,7 @@ def main():
     # Calculate ROI for Adaptation
     print("\nCalculating ROI for Climate Adaptation strategy...")
     adapt_roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -307,7 +307,7 @@ def main():
     
     # Calculate ROI with bond effects
     bond_roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -319,8 +319,16 @@ def main():
     if bond_roi_response["response_type"] == "posterior":
         bond_roi_dist = bond_roi_response["content"]["distribution"]
         bond_roi = bond_roi_dist["distribution"]["parameters"]["mean"]
+        metadata = bond_roi_dist["metadata"]
+        
         print(f"\nAdaptation + Bond Expected ROI: {bond_roi:.2%}")
-        print(f"ROI improvement from bond: {bond_roi - adapt_roi:.2%}")
+        print(f"Bond price: {metadata['bond_price']:.2%}")
+        print(f"Expected bond payoff: {metadata['expected_bond_payoff']:.2%}")
+        print("\nResilient outcomes and probabilities:")
+        for outcome, prob in zip(metadata['resilience_outcomes'], metadata['outcome_probabilities']):
+            print(f"  - Outcome {outcome:.2f}: {prob:.0%} probability")
+        
+        print(f"\nROI improvement from bond: {bond_roi - adapt_roi:.2%}")
         print(f"Final ROI difference (Adaptation + Bond - BAU): {bond_roi - bau_roi:.2%}")
     
     # Step 13: Simulate time passing and project development
@@ -346,7 +354,7 @@ def main():
     # Calculate final ROI with actual bond payoff
     print("\nCalculating final project ROI with actual bond payoff...")
     final_roi_response = requests.post(
-        f"{node_a_url}/query/roi",
+        f"{node_a_url}/query/expected_roi",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,

@@ -70,8 +70,7 @@ def create_node_routes(node):
     
     async def handle_query(request):
         variable_name = request.path_params.get("variable_name")
-        data = await request.json()
-        covariates = data.get("covariates", {})
+        covariates = await request.json()
         return JSONResponse(query_node(node, variable_name, covariates))
     
     async def handle_update(request):

@@ -313,7 +313,7 @@ class RealEstateFinanceHandler(NodeHandler):
     
     def query(self, variable_name, covariates):
         """Query Node A based on variable_name and covariates."""
-        if variable_name == "roi":
+        if variable_name == "expected_roi":
             return self._query_roi(covariates)
         return super().query(variable_name, covariates)
     

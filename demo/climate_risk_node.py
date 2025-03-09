@@ -238,7 +238,7 @@ class ClimateRiskHandler(NodeHandler):
     
     def query(self, variable_name, covariates):
         """Query Node B based on variable_name and covariates."""
-        if variable_name == "flood-probability":
+        if variable_name == "flood_probability":
             return self._query_flood_probability(covariates)
         return super().query(variable_name, covariates)
     
