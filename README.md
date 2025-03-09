@@ -401,11 +401,38 @@ Update status: success
 
 Querying updated flood probability for Miami under SSP2-4.5 scenario...
 
+Updated flood probability distribution:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 13.200000000000001, 'beta': 6.799999999999999}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}
+
+Updated expected flood probability: 0.6600
+Change in flood probability: 0.0200
+
 ================================================================================
 ===================== Step 9: Query Node B with rationale ======================
 ================================================================================
 
 Querying flood probability with rationale for Miami under SSP2-4.5 scenario...
+
+Flood probability distribution with rationale:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 13.200000000000001, 'beta': 6.799999999999999}
+
+Rationale:
+
+Calculation details:
+  - base_probability: 0.22000000000000003
+  - sea_level_rise: 0.6
+  - sea_level_coefficient: 0.3
+  - storm_intensity: 1.3
+  - storm_coefficient: 0.2
+  - flood_probability: 0.66
+
+Observations that caused the update:
+  - historical_flood_data: 0.3 (timestamp: 2025-03-09T17:49:05.779911)
 
 ================================================================================
 ==================== Step 10: Query Node A for updated ROI =====================

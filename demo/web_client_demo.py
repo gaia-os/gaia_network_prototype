@@ -75,7 +75,7 @@ def main():
     print(f"Querying flood probability for {location} under {ipcc_scenario} scenario...")
     
     flood_response = requests.post(
-        f"{node_b_url}/query/flood-probability",
+        f"{node_b_url}/query/flood_probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
@@ -144,7 +144,7 @@ def main():
     print("Querying Node C for updated actuarial data...")
     
     actuarial_response = requests.post(
-        f"{node_c_url}/query/historical-data",
+        f"{node_c_url}/query/historical_flood_data",
         json={
             "location": location
         }
@@ -181,7 +181,7 @@ def main():
     print("Querying updated flood probability for Miami under SSP2-4.5 scenario...")
     
     updated_flood_response = requests.post(
-        f"{node_b_url}/query/flood-probability",
+        f"{node_b_url}/query/flood_probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario
@@ -208,7 +208,7 @@ def main():
     print("Querying flood probability with rationale for Miami under SSP2-4.5 scenario...")
     
     rationale_response = requests.post(
-        f"{node_b_url}/query/flood-probability",
+        f"{node_b_url}/query/flood_probability",
         json={
             "location": location,
             "ipcc_scenario": ipcc_scenario,
@@ -223,19 +223,18 @@ def main():
         print(f"  - Type: {rationale_dist_data['distribution']['type']}")
         print(f"  - Parameters: {rationale_dist_data['distribution']['parameters']}")
         
-        if "rationale" in rationale_response["content"]:
-            print("\nRationale:\n")
-            rationale = rationale_response["content"]["rationale"]
-            
-            if "calculation_details" in rationale:
-                print("Calculation details:")
-                for key, value in rationale["calculation_details"].items():
-                    print(f"  - {key}: {value}")
-            
-            if "observations" in rationale:
-                print("\nObservations that caused the update:")
-                for obs in rationale["observations"]:
-                    print(f"  - {obs['variable_name']}: {obs['value']} (timestamp: {obs['timestamp']})")
+        print("\nRationale:")
+        rationale = rationale_response["content"].get("rationale", {})
+        
+        print("\nCalculation details:")
+        calculation = rationale.get("calculation", {})
+        for key, value in calculation.items():
+            print(f"  - {key}: {value}")
+        
+        print("\nObservations that caused the update:")
+        observations = rationale.get("observations", [])
+        for obs in observations:
+            print(f"  - {obs['variable_name']}: {obs['value']} (timestamp: {obs['timestamp']})")
     
     # Step 10: Query Node A for updated ROI
     print_separator("Step 10: Query Node A for updated ROI")
