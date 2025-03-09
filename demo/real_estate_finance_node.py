@@ -41,6 +41,13 @@ class RealEstateFinanceNode(Node):
             domain={"min": -1.0, "max": 1.0}
         ))
         
+        schema.add_latent(Variable(
+            name="bond_adjusted_roi",
+            description="ROI adjusted for resilience bond payoff",
+            type="continuous",
+            domain={"min": -1.0, "max": 1.0}
+        ))
+        
         # Define observable variables
         schema.add_observable(Variable(
             name="construction_cost",
@@ -63,6 +70,13 @@ class RealEstateFinanceNode(Node):
             domain={"min": 0.0, "max": 1.0}
         ))
         
+        schema.add_observable(Variable(
+            name="resilience_outcome",
+            description="Resilience outcome achieved by the project",
+            type="continuous",
+            domain={"min": 0.0, "max": 1.0}
+        ))
+        
         # Define covariates
         schema.add_covariate(Variable(
             name="location",
@@ -77,10 +91,50 @@ class RealEstateFinanceNode(Node):
             domain={"categories": ["SSP1-1.9", "SSP1-2.6", "SSP2-4.5", "SSP3-7.0", "SSP5-8.5"]}
         ))
         
+        schema.add_covariate(Variable(
+            name="adaptation_strategy",
+            description="Project adaptation strategy (BAU or Adaptation)",
+            type="categorical",
+            domain={"categories": ["BAU", "Adaptation"]}
+        ))
+        
+        schema.add_covariate(Variable(
+            name="include_bond",
+            description="Whether to include resilience bond effects",
+            type="categorical",
+            domain={"categories": ["yes", "no"]}
+        ))
+        
+        # Create initial state with default values
+        state = State()
+        state.create_checkpoint(
+            parameters={
+                "roi_model": {
+                    "base_roi": {
+                        "BAU": 0.08,       # 8% base ROI for BAU (standard real estate return)
+                        "Adaptation": 0.05  # 5% base ROI for Adaptation (higher upfront costs)
+                    },
+                    "flood_impact": {
+                        "BAU": 0.12,       # 12% ROI reduction per flood probability for BAU
+                        "Adaptation": 0.15  # 15% ROI reduction per flood probability for Adaptation (more to lose)
+                    },
+                    "resilience_outcomes": {
+                        "BAU": [0.2, 0.3, 0.4],      # Worst/median/best resilience for BAU
+                        "Adaptation": [0.6, 0.7, 0.9]  # Worst/median/best resilience for Adaptation
+                    },
+                    "outcome_probabilities": {
+                        "BAU": [0.4, 0.5, 0.1],      # Probabilities for worst/median/best (BAU)
+                        "Adaptation": [0.1, 0.6, 0.3]  # Probabilities for worst/median/best (Adaptation)
+                    }
+                }
+            }
+        )
+        
         super().__init__(
             name="Real Estate Finance Model",
             description="Models project finance for a real estate development",
             schema=schema,
+            state=state,
             id="real_estate_finance_model"
         )
     
@@ -90,12 +144,18 @@ class RealEstateFinanceNode(Node):
         covariates = query.parameters.get("covariates", {})
         
         if variable_name == "expected_roi":
-            # Calculate expected ROI based on flood probability
-            # In a real implementation, this would use the actual model
-            
-            # First, we need to get the flood probability from Node B
+            # Get the covariates
             location = covariates.get("location", "Miami")
             ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+            adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
+            include_bond = covariates.get("include_bond", "no")
+            
+            # Get model parameters
+            roi_model = self.state.current_checkpoint.parameters["roi_model"]
+            base_roi = roi_model["base_roi"][adaptation_strategy]
+            flood_impact = roi_model["flood_impact"][adaptation_strategy]
+            resilience_outcomes = roi_model["resilience_outcomes"][adaptation_strategy]
+            outcome_probabilities = roi_model["outcome_probabilities"][adaptation_strategy]
             
             # Query Node B for flood probability
             flood_response = self.query_posterior(
@@ -124,23 +184,110 @@ class RealEstateFinanceNode(Node):
                 )
             
             flood_marginal = MarginalDistribution.from_dict(flood_dist_data)
-            
-            # Calculate ROI based on flood probability
-            # This is a simplified model for the demo
             flood_prob = flood_marginal.distribution.parameters["alpha"] / (
                 flood_marginal.distribution.parameters["alpha"] + 
                 flood_marginal.distribution.parameters["beta"]
             )
             
-            # Higher flood probability means lower ROI
-            base_roi = 0.15  # 15% base ROI
-            roi_reduction = flood_prob * 0.5  # Up to 50% reduction based on flood risk
+
+            
+            # Calculate base ROI with flood impact
+            roi_reduction = flood_prob * flood_impact
             expected_roi = base_roi - roi_reduction
+            
+            # If adaptation strategy with bond, calculate bond effects
+            if adaptation_strategy == "Adaptation" and include_bond == "yes":
+                # Get bond price
+                price_response = self.query_posterior(
+                    target_node_id="resilience_bond_issuer",
+                    variable_name="bond_price",
+                    covariates={}
+                )
+                
+                if price_response.response_type == "error":
+                    return QueryResponse(
+                        query_id=query.id,
+                        response_type="error",
+                        content={"error": f"Failed to get bond price: {price_response.content.get('error')}"}
+                    )
+                
+                price_dist = MarginalDistribution.from_dict(price_response.content["distribution"])
+                bond_price = price_dist.distribution.parameters["mean"]
+                
+                # Check if we have actual resilience outcome
+                actual_resilience = covariates.get("actual_resilience")
+                
+                if actual_resilience is not None:
+                    # Use actual resilience outcome
+                    bond_response = self.query_posterior(
+                        target_node_id="resilience_bond_issuer",
+                        variable_name="bond_payoff",
+                        covariates={
+                            "location": location,
+                            "actual_resilience": actual_resilience
+                        }
+                    )
+                    
+                    if bond_response.response_type == "error":
+                        return QueryResponse(
+                            query_id=query.id,
+                            response_type="error",
+                            content={"error": f"Failed to get actual bond payoff: {bond_response.content.get('error')}"}
+                        )
+                    
+                    payoff_dist = MarginalDistribution.from_dict(bond_response.content["distribution"])
+                    actual_payoff = payoff_dist.distribution.parameters["mean"]
+                    expected_roi = expected_roi - bond_price + actual_payoff
+                else:
+                    # Calculate expected payoff from possible outcomes
+                    bond_response = self.query_posterior(
+                        target_node_id="resilience_bond_issuer",
+                        variable_name="bond_payoff",
+                        covariates={
+                            "location": location,
+                            "resilience_outcomes": resilience_outcomes
+                        }
+                    )
+                    
+                    if bond_response.response_type == "error":
+                        return QueryResponse(
+                            query_id=query.id,
+                            response_type="error",
+                            content={"error": f"Failed to get bond payoffs: {bond_response.content.get('error')}"}
+                        )
+                    
+                    payoff_distributions = bond_response.content.get("distributions", {})
+                    expected_payoff = 0.0
+                    for outcome, prob in zip(resilience_outcomes, outcome_probabilities):
+                        payoff_dist = MarginalDistribution.from_dict(payoff_distributions[str(outcome)])
+                        payoff = payoff_dist.distribution.parameters["mean"]
+                        expected_payoff += prob * payoff
+                    
+                    expected_roi = expected_roi - bond_price + expected_payoff
             
             # Add some uncertainty
             roi_std = 0.03
-            
             distribution = NormalDistribution(mean=expected_roi, std=roi_std)
+            
+            # Initialize metadata
+            metadata = {
+                "location": location,
+                "ipcc_scenario": ipcc_scenario,
+                "adaptation_strategy": adaptation_strategy,
+                "include_bond": include_bond,
+                "flood_probability": flood_prob
+            }
+            
+            # Add bond-related metadata if applicable
+            if adaptation_strategy == "Adaptation" and include_bond == "yes":
+                metadata["bond_price"] = bond_price
+                if actual_resilience is not None:
+                    metadata["actual_resilience"] = actual_resilience
+                    metadata["actual_bond_payoff"] = actual_payoff
+                else:
+                    metadata["expected_bond_payoff"] = expected_payoff
+                    metadata["resilience_outcomes"] = resilience_outcomes
+                    metadata["outcome_probabilities"] = outcome_probabilities
             
             return QueryResponse(
                 query_id=query.id,
@@ -149,11 +296,7 @@ class RealEstateFinanceNode(Node):
                     "distribution": MarginalDistribution(
                         name="expected_roi",
                         distribution=distribution,
-                        metadata={
-                            "location": location,
-                            "ipcc_scenario": ipcc_scenario,
-                            "flood_probability": flood_prob
-                        }
+                        metadata=metadata
                     ).to_dict()
                 }
             )
@@ -176,43 +319,16 @@ class RealEstateFinanceHandler(NodeHandler):
     
     def _query_roi(self, covariates):
         """Query Node A for expected ROI."""
-        location = covariates.get("location", "Miami")
-        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        # Set default values if not provided
+        if "adaptation_strategy" not in covariates:
+            covariates["adaptation_strategy"] = "BAU"
+        if "include_bond" not in covariates:
+            covariates["include_bond"] = "no"
         
-        # Import here to avoid circular imports
-        from demo.model_nodes import get_node_by_id
-        
-        # Get Node B
-        node_b = get_node_by_id("climate_risk_model")
-        
-        # Query Node B for flood probability
-        flood_response = self.node.query_posterior(
-            target_node_id=node_b.id,
-            variable_name="flood_probability",
-            covariates={
-                "location": location,
-                "ipcc_scenario": ipcc_scenario
-            }
-        )
-        
-        # Extract the flood probability
-        if flood_response.response_type == "posterior":
-            distribution_data = flood_response.content["distribution"]
-            alpha = distribution_data['distribution']['parameters']['alpha']
-            beta = distribution_data['distribution']['parameters']['beta']
-            flood_probability = alpha / (alpha + beta)
-        else:
-            raise Exception("Failed to get flood probability")
-        
-        # Calculate expected ROI based on flood probability
-        roi_response = self.node.query_posterior(
+        response = self.node.query_posterior(
             target_node_id=self.node.id,
             variable_name="expected_roi",
-            covariates={
-                "location": location,
-                "ipcc_scenario": ipcc_scenario,
-                "flood_probability": flood_probability
-            }
+            covariates=covariates
         )
         
-        return roi_response.to_dict()
+        return response.to_dict()

@@ -21,7 +21,7 @@ from starlette.middleware.cors import CORSMiddleware
 from demo.model_nodes import create_demo_nodes, create_demo_node_handlers
 
 # Create the demo nodes
-node_a, node_b, node_c = create_demo_nodes()
+node_a, node_b, node_c, node_d = create_demo_nodes()
 
 # Create the node handlers
 node_handlers = create_demo_node_handlers()
@@ -119,6 +119,12 @@ app_c = Starlette(
     middleware=middleware
 )
 
+app_d = Starlette(
+    debug=True,
+    routes=create_node_routes(node_d),
+    middleware=middleware
+)
+
 
 def run_server(app, host, port):
     """Run a server for the given app."""
@@ -136,14 +142,17 @@ def main():
     thread_a = threading.Thread(target=run_server, args=(app_a, "127.0.0.1", 8011))
     thread_b = threading.Thread(target=run_server, args=(app_b, "127.0.0.1", 8012))
     thread_c = threading.Thread(target=run_server, args=(app_c, "127.0.0.1", 8013))
+    thread_d = threading.Thread(target=run_server, args=(app_d, "127.0.0.1", 8014))
     
     thread_a.daemon = True
     thread_b.daemon = True
     thread_c.daemon = True
+    thread_d.daemon = True
     
     thread_a.start()
     thread_b.start()
     thread_c.start()
+    thread_d.start()
     
     # Keep the main thread running
     try:

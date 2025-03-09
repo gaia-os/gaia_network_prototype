@@ -315,7 +315,7 @@ Change in ROI: -1.00%
 
 ## Implementation Notes
 
-- The prototype uses a simplified model for demonstration purposes
+- The prototype uses simple hypothetical models for demonstration purposes, rather than actual probabilistic models and inference. We will implement those in an upcoming commit.
 - The nodes communicate via direct method calls in the standard demo and via HTTP/[ASGI](https://asgi.readthedocs.io/en/latest/) in the web demo
 - The demo uses a simple in-memory registry for node discovery, which would be replaced with a distributed registry in a real implementation
 - The web services implementation uses an object-oriented approach with a base `NodeHandler` class and specialized handler classes for each node type

@@ -14,7 +14,6 @@ import json
 import time
 from pprint import pprint
 
-from gaia_network.registry import register_node, get_node, clear_registry
 from demo.model_nodes import create_demo_nodes
 
 
@@ -31,10 +30,11 @@ def main():
     
     # Create and register the demo nodes
     print("Creating demo nodes...")
-    node_a, node_b, node_c = create_demo_nodes()
+    node_a, node_b, node_c, node_d = create_demo_nodes()
     print(f"Node A (Real Estate Finance): {node_a.id}")
     print(f"Node B (Climate Risk): {node_b.id}")
     print(f"Node C (Actuarial Data): {node_c.id}")
+    print(f"Node D (Resilience Bond): {node_d.id}")
     
     # Step 1: Node A gets a hardcoded location and IPCC scenario
     print_separator("Step 1: Node A gets a hardcoded location and IPCC scenario")
@@ -258,6 +258,128 @@ def main():
         updated_expected_roi = updated_roi_dist_data['distribution']['parameters']['mean']
         print(f"\nUpdated expected ROI: {updated_expected_roi:.2%}")
         print(f"Change in ROI: {(updated_expected_roi - expected_roi):.2%}")
+    
+    # Step 11: Compare ROI for BAU vs Adaptation (without bond)
+    print_separator("Step 11: Compare ROI for BAU vs Adaptation (without bond)")
+    
+    # Query ROI for BAU
+    print("\nCalculating ROI for Business-as-Usual (BAU) strategy...")
+    bau_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="expected_roi",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        }
+    )
+    
+    if bau_response.response_type == "posterior":
+        bau_dist = bau_response.content["distribution"]
+        bau_roi = bau_dist["distribution"]["parameters"]["mean"]
+        print(f"BAU Expected ROI: {bau_roi:.2%}")
+    
+    # Query ROI for Adaptation
+    print("\nCalculating ROI for Climate Adaptation strategy...")
+    adapt_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="expected_roi",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    )
+    
+    if adapt_response.response_type == "posterior":
+        adapt_dist = adapt_response.content["distribution"]
+        adapt_roi = adapt_dist["distribution"]["parameters"]["mean"]
+        print(f"Adaptation Expected ROI: {adapt_roi:.2%}")
+    
+    print(f"\nInitial ROI difference (Adaptation - BAU): {(adapt_roi - bau_roi):.2%}")
+    
+    # Step 12: Consider resilience bond effects for Adaptation strategy
+    print_separator("Step 12: Consider resilience bond effects for Adaptation strategy")
+    print("Calculating ROI for Adaptation strategy with resilience bond...")
+    
+    # Query ROI for Adaptation with bond
+    bond_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="expected_roi",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    )
+    
+    if bond_response.response_type == "posterior":
+        bond_dist = bond_response.content["distribution"]
+        bond_roi = bond_dist["distribution"]["parameters"]["mean"]
+        metadata = bond_dist["metadata"]
+        
+        print(f"\nAdaptation + Bond Expected ROI: {bond_roi:.2%}")
+        print(f"Bond price: {metadata['bond_price']:.2%}")
+        print(f"Expected bond payoff: {metadata['expected_bond_payoff']:.2%}")
+        print("\nResilient outcomes and probabilities:")
+        for outcome, prob in zip(metadata['resilience_outcomes'], metadata['outcome_probabilities']):
+            print(f"  - Outcome {outcome:.2f}: {prob:.0%} probability")
+        
+        print(f"\nROI improvement from bond: {(bond_roi - adapt_roi):.2%}")
+        print(f"Final ROI difference (Adaptation + Bond - BAU): {(bond_roi - bau_roi):.2%}")
+    
+    # Step 13: Simulate time passing and project development
+    print_separator("Step 13: Simulate time passing and project development")
+    print("Time passes, the project is developed...")
+    
+    # Add new actuarial data to Node C
+    print("\nNode C receives new actuarial data...")
+    node_c.add_new_data(location=location, value=0.35)  # Better than average flood data
+    print("New actuarial data added to Node C")
+    
+    # Node D queries Node C and updates its state
+    print("\nNode D queries Node C for actuarial data to determine actual resilience outcome...")
+    actual_resilience = node_d.update_with_actuarial_data(location)
+    print(f"Actual resilience outcome achieved: {actual_resilience:.2f}")
+    
+    # Calculate actual bond payoff
+    print("\nCalculating actual bond payoff based on achieved resilience...")
+    actual_payoff_response = node_d.query_posterior(
+        target_node_id=node_d.id,
+        variable_name="bond_payoff",
+        covariates={
+            "location": location,
+            "actual_resilience": actual_resilience
+        }
+    )
+    
+    if actual_payoff_response.response_type == "posterior":
+        payoff_dist = actual_payoff_response.content["distribution"]
+        actual_payoff = payoff_dist["distribution"]["parameters"]["mean"]
+        print(f"Actual bond payoff: {actual_payoff:.2%}")
+    
+    # Calculate final project ROI
+    print("\nCalculating final project ROI with actual bond payoff...")
+    final_roi_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="expected_roi",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes",
+            "actual_resilience": actual_resilience
+        }
+    )
+    
+    if final_roi_response.response_type == "posterior":
+        final_dist = final_roi_response.content["distribution"]
+        final_roi = final_dist["distribution"]["parameters"]["mean"]
+        print(f"Final project ROI: {final_roi:.2%}")
+        print(f"Improvement over initial BAU ROI: {(final_roi - bau_roi):.2%}")
     
     print_separator("Demo Complete")
 

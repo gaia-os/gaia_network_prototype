@@ -31,6 +31,7 @@ def main():
     node_a_url = "http://127.0.0.1:8011"
     node_b_url = "http://127.0.0.1:8012"
     node_c_url = "http://127.0.0.1:8013"
+    node_d_url = "http://127.0.0.1:8014"
     
     print_separator("Gaia Network Web Client Demo")
     
@@ -39,10 +40,12 @@ def main():
     node_a_info = requests.get(f"{node_a_url}/info").json()
     node_b_info = requests.get(f"{node_b_url}/info").json()
     node_c_info = requests.get(f"{node_c_url}/info").json()
+    node_d_info = requests.get(f"{node_d_url}/info").json()
     
     print(f"Node A (Real Estate Finance): {node_a_info['id']}")
     print(f"Node B (Climate Risk): {node_b_info['id']}")
     print(f"Node C (Actuarial Data): {node_c_info['id']}")
+    print(f"Node D (Resilience Bond): {node_d_info['id']}")
     
     # Step 1: Set location and IPCC scenario
     print_separator("Step 1: Set location and IPCC scenario")
@@ -105,7 +108,9 @@ def main():
         f"{node_a_url}/query/roi",
         json={
             "location": location,
-            "ipcc_scenario": ipcc_scenario
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
         }
     ).json()
     
@@ -240,7 +245,9 @@ def main():
         f"{node_a_url}/query/roi",
         json={
             "location": location,
-            "ipcc_scenario": ipcc_scenario
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
         }
     ).json()
     
@@ -255,6 +262,105 @@ def main():
         updated_expected_roi = updated_roi_dist_data['distribution']['parameters']['mean']
         print(f"\nUpdated expected ROI: {updated_expected_roi:.2%}")
         print(f"Change in ROI: {updated_expected_roi - expected_roi:.2%}")
+    
+    # Step 11: Compare ROI for BAU vs Adaptation (without bond)
+    print_separator("Step 11: Compare ROI for BAU vs Adaptation (without bond)")
+    
+    # Calculate ROI for BAU
+    print("\nCalculating ROI for Business-as-Usual (BAU) strategy...")
+    bau_roi_response = requests.post(
+        f"{node_a_url}/query/roi",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        }
+    ).json()
+    
+    if bau_roi_response["response_type"] == "posterior":
+        bau_roi_dist = bau_roi_response["content"]["distribution"]
+        bau_roi = bau_roi_dist["distribution"]["parameters"]["mean"]
+        print(f"BAU Expected ROI: {bau_roi:.2%}")
+    
+    # Calculate ROI for Adaptation
+    print("\nCalculating ROI for Climate Adaptation strategy...")
+    adapt_roi_response = requests.post(
+        f"{node_a_url}/query/roi",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    ).json()
+    
+    if adapt_roi_response["response_type"] == "posterior":
+        adapt_roi_dist = adapt_roi_response["content"]["distribution"]
+        adapt_roi = adapt_roi_dist["distribution"]["parameters"]["mean"]
+        print(f"Adaptation Expected ROI: {adapt_roi:.2%}")
+        print(f"\nInitial ROI difference (Adaptation - BAU): {adapt_roi - bau_roi:.2%}")
+    
+    # Step 12: Consider resilience bond effects for Adaptation strategy
+    print_separator("Step 12: Consider resilience bond effects for Adaptation strategy")
+    print("\nCalculating ROI for Adaptation strategy with resilience bond...")
+    
+    # Calculate ROI with bond effects
+    bond_roi_response = requests.post(
+        f"{node_a_url}/query/roi",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    ).json()
+    
+    if bond_roi_response["response_type"] == "posterior":
+        bond_roi_dist = bond_roi_response["content"]["distribution"]
+        bond_roi = bond_roi_dist["distribution"]["parameters"]["mean"]
+        print(f"\nAdaptation + Bond Expected ROI: {bond_roi:.2%}")
+        print(f"ROI improvement from bond: {bond_roi - adapt_roi:.2%}")
+        print(f"Final ROI difference (Adaptation + Bond - BAU): {bond_roi - bau_roi:.2%}")
+    
+    # Step 13: Simulate time passing and project development
+    print_separator("Step 13: Simulate time passing and project development")
+    print("\nTime passes, the project is developed...")
+    
+    # Add new actuarial data
+    print("\nNode C receives new actuarial data...")
+    add_data_response = requests.post(
+        f"{node_c_url}/add-data",
+        json={
+            "location": location,
+            "value": 0.4
+        }
+    ).json()
+    print("New actuarial data added to Node C")
+    
+    # Query Node D for actual resilience outcome
+    print("\nNode D queries Node C for actuarial data to determine actual resilience outcome...")
+    actual_resilience = 0.70  # This would normally come from Node C
+    print(f"Actual resilience outcome achieved: {actual_resilience:.2f}")
+    
+    # Calculate final ROI with actual bond payoff
+    print("\nCalculating final project ROI with actual bond payoff...")
+    final_roi_response = requests.post(
+        f"{node_a_url}/query/roi",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes",
+            "actual_resilience": actual_resilience
+        }
+    ).json()
+    
+    if final_roi_response["response_type"] == "posterior":
+        final_roi_dist = final_roi_response["content"]["distribution"]
+        final_roi = final_roi_dist["distribution"]["parameters"]["mean"]
+        print(f"Final project ROI: {final_roi:.2%}")
+        print(f"Improvement over initial BAU ROI: {final_roi - bau_roi:.2%}")
     
     print_separator("Demo Complete")
 
