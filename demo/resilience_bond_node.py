@@ -82,14 +82,14 @@ class ResilienceBondNode(Node):
         state = State()
         state.create_checkpoint(
             latent_values={
-                "bond_base_price": 0.03,  # 3% of project value (bond price)
-                "bond_risk_premium": 0.00  # No risk premium
+                "bond_base_price": 0.02,  # 2% of project value (very low entry cost)
+                "bond_risk_premium": 0.01  # 1% risk premium (attractive)
             },
             parameters={
                 "payoff_model": {
-                    "worst_case_multiplier": 2.7,    # 270% of base price (8.1% payoff)
-                    "median_case_multiplier": 3.0,   # 300% of base price (9.0% payoff)
-                    "best_case_multiplier": 3.3      # 330% of base price (9.9% payoff)
+                    "worst_case_multiplier": 1.5,    # 150% of base price (guaranteed upside)
+                    "median_case_multiplier": 3.5,   # 350% of base price (strong upside)
+                    "best_case_multiplier": 6.0      # 600% of base price (exceptional upside)
                 }
             }
         )
