@@ -325,21 +325,7 @@ Each node provides the following RESTful endpoints:
 
 ### Example Workflow
 
-The web client demo demonstrates the following workflow:
-
-1. Get information about all three nodes
-2. Set the location (Miami) and IPCC scenario (SSP2-4.5)
-3. Get Node B's schema
-4. Query Node B for flood probability
-5. Query Node A for expected ROI based on the flood probability
-6. Add new actuarial data to Node C
-7. Query Node C for the updated data
-8. Update Node B with the new data
-9. Query Node B again for the updated flood probability
-10. Query Node B with rationale to understand the changes
-11. Query Node A for BAU and Adaptation ROI
-12. Query Node A for Adaptation ROI with bond effects
-13. Simulate project development and calculate final ROI with actual bond payoff
+The web client demo demonstrates the same workflow as the standard demo, but using HTTP requests instead of direct method calls.
 
 This generates the following output:
 
@@ -383,8 +369,16 @@ Covariates:
 ================================================================================
 
 Querying flood probability for Miami under SSP2-4.5 scenario...
-Raw flood response: {'query_id': '7c89dc98-4a1a-4aab-8e89-5a5dbce594c2', 'response_type': 'error', 'content': {'error': 'Unsupported variable: flood-probability'}, 'timestamp': '2025-03-09T17:31:48.584371', 'metadata': {}}
-Response type: error
+Raw flood response: {'query_id': 'fd0a2d69-3f06-41d6-aedb-c58a963bf11e', 'response_type': 'posterior', 'content': {'distribution': {'name': 'flood_probability', 'distribution': {'type': 'beta', 'parameters': {'alpha': 12.8, 'beta': 7.199999999999999}}, 'metadata': {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}}}, 'timestamp': '2025-03-11T17:48:59.848726', 'metadata': {}}
+Response type: posterior
+
+Flood probability distribution:
+  - Name: flood_probability
+  - Type: beta
+  - Parameters: {'alpha': 12.8, 'beta': 7.199999999999999}
+  - Metadata: {'location': 'Miami', 'ipcc_scenario': 'SSP2-4.5'}
+
+Expected flood probability: 0.6400
 
 ================================================================================
 ========================= Step 4: Query Node A for ROI =========================
@@ -464,7 +458,7 @@ Calculation details:
   - flood_probability: 0.66
 
 Observations that caused the update:
-  - historical_flood_data: 0.3 (timestamp: 2025-03-09T17:49:05.779911)
+  - historical_flood_data: 0.3 (timestamp: 2025-03-11T17:48:59.854189)
 
 ================================================================================
 ==================== Step 10: Query Node A for updated ROI =====================
@@ -490,9 +484,9 @@ Calculating ROI for Business-as-Usual (BAU) strategy...
 BAU Expected ROI: 0.08%
 
 Calculating ROI for Climate Adaptation strategy...
-Adaptation Expected ROI: -4.90%
+Adaptation Expected ROI: -1.30%
 
-Initial ROI difference (Adaptation - BAU): -4.98%
+Initial ROI difference (Adaptation - BAU): -1.38%
 
 ================================================================================
 ====== Step 12: Consider resilience bond effects for Adaptation strategy =======
@@ -501,17 +495,14 @@ Initial ROI difference (Adaptation - BAU): -4.98%
 
 Calculating ROI for Adaptation strategy with resilience bond...
 
-Adaptation + Bond Expected ROI: 0.20%
+Adaptation + Bond Expected ROI: 3.80%
 Bond price: 3.00%
 Expected bond payoff: 8.10%
 
 Resilient outcomes and probabilities:
-  - Outcome 0.60: 10% probability
-  - Outcome 0.70: 60% probability
-  - Outcome 0.90: 30% probability
 
 ROI improvement from bond: 5.10%
-Final ROI difference (Adaptation + Bond - BAU): 0.12%
+Final ROI difference (Adaptation + Bond - BAU): 3.72%
 
 ================================================================================
 ============ Step 13: Simulate time passing and project development ============
@@ -527,8 +518,94 @@ Node D queries Node C for actuarial data to determine actual resilience outcome.
 Actual resilience outcome achieved: 0.70
 
 Calculating final project ROI with actual bond payoff...
-Final project ROI: 1.10%
-Improvement over initial BAU ROI: 1.02%
+Final project ROI: 4.70%
+Improvement over initial BAU ROI: 4.62%
+
+================================================================================
+================= Step 14: Calculate System Free Energy (SFE) ==================
+================================================================================
+
+Calculating System Free Energy (SFE) to measure divergence from target resilience distribution...
+
+Calculating SFE for Business-as-Usual (BAU) strategy...
+BAU System Free Energy: 1.9831
+
+BAU Resilience Distribution:
+  - Current: {'0.2': 0.4, '0.3': 0.5, '0.4': 0.1}
+  - Target:  {'0.2': 0.05, '0.3': 0.05, '0.4': 0.1, '0.6': 0.15, '0.7': 0.25, '0.9': 0.4}
+
+Calculating SFE for Climate Adaptation strategy...
+Adaptation System Free Energy: 0.3984
+
+Adaptation Resilience Distribution:
+  - Current: {'0.6': 0.1, '0.7': 0.6, '0.9': 0.3}
+  - Target:  {'0.2': 0.05, '0.3': 0.05, '0.4': 0.1, '0.6': 0.15, '0.7': 0.25, '0.9': 0.4}
+
+Calculating SFE for Adaptation strategy with resilience bond...
+Adaptation + Bond System Free Energy: 0.3984
+SFE improvement from bond: 0.0000
+
+Adaptation + Bond Resilience Distribution:
+  - Current: {'0.6': 0.1, '0.7': 0.6, '0.9': 0.3}
+  - Target:  {'0.2': 0.05, '0.3': 0.05, '0.4': 0.1, '0.6': 0.15, '0.7': 0.25, '0.9': 0.4}
+
+================================================================================
+===================== Step 15: Calculate Alignment Scores ======================
+================================================================================
+
+Calculating economic incentive alignment between profit goals and climate resilience goals...
+
+Calculating economic incentive alignment without resilience bond...
+Economic Incentive Alignment (without bond): 33.40%
+BAU ROI: 0.0008
+Adaptation ROI (without bond): -0.0130
+ROI difference (Adaptation - BAU): -0.0138
+
+Calculating economic incentive alignment with resilience bond...
+Economic Incentive Alignment (with bond): 86.53%
+BAU ROI: 0.0008
+Adaptation ROI (with bond): 0.0380
+ROI difference (Adaptation - BAU): 0.0372
+Alignment improvement from bond: 53.13%
+
+================================================================================
+===== Step 16: Calculate Final SFE and Alignment After Project Development =====
+================================================================================
+
+Calculating final SFE and alignment scores based on actual resilience outcome...
+
+Actual resilience outcome: 0.70
+
+Calculating final System Free Energy...
+Final System Free Energy: 0.3984
+Realized resilience distribution (delta): {'0.6': 0.1, '0.7': 0.6, '0.9': 0.3}
+Total SFE improvement from initial BAU: 1.5846
+
+Calculating final economic incentive alignment...
+Final Economic Incentive Alignment: 86.53%
+BAU ROI: 0.0008
+Adaptation ROI (with bond): 0.0380
+ROI difference (Adaptation - BAU): 0.0372
+Total alignment improvement from initial state: 53.13%
+
+================================================================================
+============== Step 17: Summary of SFE and Alignment Improvements ==============
+================================================================================
+
+Summary of System Free Energy (SFE) and alignment improvements:
+
+System Free Energy (lower is better):
+  - BAU:                   1.9831
+  - Adaptation:            0.3984  (1.5846 improvement)
+  - Adaptation + Bond:     0.3984  (0.0000 improvement)
+  - Final (Actual Result): 0.3984  (0.0000 improvement)
+  - Total Improvement:     1.5846
+
+Economic Incentive Alignment (higher is better):
+  - Without Bond:          33.40%
+  - With Bond:             86.53%  (53.13% improvement)
+  - Final (Actual Result): 86.53%  (0.00% improvement)
+  - Total Improvement:     53.13%
 
 ================================================================================
 ================================ Demo Complete =================================
