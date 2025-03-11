@@ -233,75 +233,91 @@ class RealEstateFinanceNode(Node):
         
         return super().query(variable_name, covariates)
     
-    def _handle_alignment_score_query(self, query_id: str, covariates: Dict) -> QueryResponse:
-        """Handle alignment score calculation and response formatting.
-        
-        Args:
-            query_id: The ID of the original query
-            covariates: Dictionary of covariates for the query
-            
-        Returns:
-            QueryResponse with alignment score distribution
-        """
+    def _handle_alignment_score_query(self, query_id, covariates):
+        """Handle a query for alignment score."""
         # Get the covariates
         location = covariates.get("location", "Miami")
         ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
         adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
         include_bond = covariates.get("include_bond", "no")
-        actual_resilience = covariates.get("actual_resilience")
         
-        # Get resilience distribution
-        resilience_distribution = self._get_resilience_distribution(adaptation_strategy)
-        
-        # Calculate expected ROI and get profit values
-        roi_dist = self._calculate_expected_roi({
-            "location": location,
-            "ipcc_scenario": ipcc_scenario,
-            "adaptation_strategy": adaptation_strategy,
-            "include_bond": include_bond,
-            "actual_resilience": actual_resilience
-        })
+        # Calculate the ROI distribution for the specified strategy
+        roi_dist = self._calculate_expected_roi(covariates)
         
         if isinstance(roi_dist, QueryResponse):
             # If an error occurred, return the error response
             return roi_dist
         
-        # Extract profit values from the conditional distributions
-        profit_values = {}
-        for outcome, dist in roi_dist.conditional_distributions.items():
-            profit_values[outcome] = dist.parameters["mean"]
+        # Get the resilience distribution for the specified strategy
+        resilience_dist = self._get_resilience_distribution(adaptation_strategy)
         
-        # Get the global target distribution for climate resilience
-        target_distribution = TARGET_RESILIENCE_DISTRIBUTION
+        # Get the target resilience distribution
+        target_dist = TARGET_RESILIENCE_DISTRIBUTION
         
-        # Calculate alignment score
-        _, alignment = self._calculate_sfe_and_alignment(
-            resilience_distribution, profit_values, target_distribution
-        )
+        # Calculate BAU ROI for comparison
+        bau_roi_dist = self._calculate_expected_roi({
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        })
         
-        # Create a distribution for the alignment score
-        alignment_dist = BetaDistribution(
-            alpha=alignment * 10 + 1,  # Shape parameters to center around the alignment value
-            beta=(1 - alignment) * 10 + 1
-        )
+        # Calculate Adaptation ROI for comparison
+        adaptation_roi_dist = self._calculate_expected_roi({
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": include_bond
+        })
         
+        # Extract the expected ROI values
+        bau_roi = bau_roi_dist.marginal_distribution.distribution.parameters["mean"]
+        adaptation_roi = adaptation_roi_dist.marginal_distribution.distribution.parameters["mean"]
+        
+        # Extract profit values from the ROI distribution
+        profit_values = {outcome: dist.parameters["mean"] for outcome, dist in roi_dist.conditional_distributions.items()}
+        
+        # Calculate SFE
+        sfe = calculate_sfe(resilience_dist, target_dist)
+        
+        # Calculate alignment score based on economic incentives
+        # If Adaptation ROI > BAU ROI, alignment is perfect (1.0)
+        # If Adaptation ROI < BAU ROI, alignment is poor (0.0)
+        roi_diff = adaptation_roi - bau_roi
+        
+        print("\n=== ECONOMIC INCENTIVE ALIGNMENT ===")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI: {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {roi_diff:.4f}")
+        
+        if roi_diff > 0:
+            # Adaptation is more profitable than BAU, perfect alignment
+            alignment = 1.0
+        else:
+            # BAU is more profitable than Adaptation, no alignment
+            alignment = 0.0
+        
+        print(f"Economic incentive alignment: {alignment:.4f}")
+        
+        # Create the response
         return QueryResponse(
             query_id=query_id,
             response_type="posterior",
             content={
-                "distribution": MarginalDistribution(
-                    name="alignment_score",
-                    distribution=alignment_dist,
-                    metadata={
-                        "adaptation_strategy": adaptation_strategy,
-                        "include_bond": include_bond,
-                        "alignment_value": alignment
-                    }
-                ).to_dict()
+                "alignment_score": alignment,
+                "sfe": sfe,
+                "metadata": {
+                    "location": location,
+                    "ipcc_scenario": ipcc_scenario,
+                    "adaptation_strategy": adaptation_strategy,
+                    "include_bond": include_bond,
+                    "bau_roi": bau_roi,
+                    "adaptation_roi": adaptation_roi
+                }
             }
         )
     
-    def _handle_sfe_query(self, query_id: str, covariates: Dict) -> QueryResponse:
+    def _handle_sfe_query(self, query_id, covariates):
         """Handle system free energy calculation and response formatting.
         
         Args:
@@ -454,16 +470,7 @@ class RealEstateFinanceNode(Node):
             # Convert outcome to float for calculations
             outcome_float = float(outcome)
             
-            # Calculate the ROI for this outcome based on adaptation strategy
-            # This ensures proper alignment scores as specified in the implementation plan
-            if adaptation_strategy == "BAU":
-                # For BAU, we want a negative correlation with resilience
-                # Higher resilience outcomes should have lower profits
-                outcome_roi = base_roi * (1.0 - outcome_float)
-            else:  # Adaptation
-                # For Adaptation, we want a positive correlation with resilience
-                # Higher resilience outcomes should have higher profits
-                outcome_roi = base_roi * outcome_float
+            outcome_roi = base_roi * outcome_float
             
             # Add some uncertainty to the conditional distribution
             roi_std = 0.01  # Less uncertainty in the conditional distributions

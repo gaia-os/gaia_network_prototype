@@ -195,6 +195,10 @@ def calculate_alignment_score_dict(profit_dict: Dict[float, float], resilience_d
     """
     Calculate alignment score between profit distribution and resilience distribution using dictionary format.
     
+    The alignment score measures how well the profit incentives align with better resilience outcomes.
+    A score of 1.0 means perfect alignment (profit-maximizing behavior leads to best resilience outcomes).
+    A score of 0.0 means no alignment (profit-maximizing behavior leads to worst resilience outcomes).
+    
     Args:
         profit_dict: Dictionary mapping resilience outcomes to profit values
         resilience_dist: Dictionary mapping resilience outcomes to probabilities
@@ -202,28 +206,77 @@ def calculate_alignment_score_dict(profit_dict: Dict[float, float], resilience_d
     Returns:
         Alignment score between 0 and 1, where 1 is perfect alignment
     """
+    # Detailed logging to understand inputs
+    print("\n=== ALIGNMENT SCORE CALCULATION ===")
+    print(f"Profit values: {profit_dict}")
+    print(f"Resilience distribution: {resilience_dist}")
+    
+    # Check if we have additional metadata for economic incentive calculation
+    if isinstance(resilience_dist, dict) and "metadata" in resilience_dist:
+        metadata = resilience_dist["metadata"]
+        if "adaptation_strategy" in metadata and "bau_roi" in metadata and "adaptation_roi" in metadata:
+            # Use economic incentive alignment based on marginal ROI comparison
+            bau_roi = metadata["bau_roi"]
+            adaptation_roi = metadata["adaptation_roi"]
+            
+            print(f"BAU ROI: {bau_roi:.4f}")
+            print(f"Adaptation ROI: {adaptation_roi:.4f}")
+            
+            # Calculate the alignment score based on the ROI difference
+            # If Adaptation ROI > BAU ROI, alignment is perfect (1.0)
+            # If Adaptation ROI < BAU ROI, alignment is poor (0.0)
+            roi_diff = adaptation_roi - bau_roi
+            print(f"ROI difference (Adaptation - BAU): {roi_diff:.4f}")
+            
+            if roi_diff > 0:
+                # Adaptation is more profitable than BAU, perfect alignment
+                alignment = 1.0
+            else:
+                # BAU is more profitable than Adaptation, no alignment
+                alignment = 0.0
+            
+            print(f"Economic incentive alignment: {alignment:.4f}")
+            return alignment
+    
     # Ensure both dictionaries have the same keys
     common_outcomes = sorted(set(profit_dict.keys()) & set(resilience_dist.keys()))
+    print(f"Common outcomes: {common_outcomes}")
     
     if len(common_outcomes) < 2:
-        return 0.5  # Not enough data points for correlation
+        print("Not enough data points for alignment calculation, returning 0.5")
+        return 0.5  # Not enough data points for alignment calculation
     
-    # Extract outcomes and profit values
-    outcomes = np.array([float(outcome) for outcome in common_outcomes])
-    profits = np.array([profit_dict[outcome] for outcome in common_outcomes])
+    # Calculate weighted average resilience outcome
+    total_prob = sum(resilience_dist[outcome] for outcome in common_outcomes)
+    avg_resilience = sum(outcome * resilience_dist[outcome] for outcome in common_outcomes) / total_prob if total_prob > 0 else 0
+    print(f"Weighted average resilience outcome: {avg_resilience:.4f}")
     
-    # Calculate Pearson correlation
-    from scipy.stats import pearsonr
-    correlation, p_value = pearsonr(outcomes, profits)
+    # Find the most profitable outcome
+    max_profit_outcome = max(common_outcomes, key=lambda outcome: profit_dict[outcome])
+    print(f"Most profitable outcome: {max_profit_outcome}")
     
-    # Map correlation from [-1, 1] to [0, 1] range
-    # This is a simple linear mapping
-    alignment_score = (correlation + 1) / 2
+    # Calculate the alignment score based on how close the most profitable outcome is to the best resilience outcome
+    best_resilience_outcome = max(common_outcomes)
+    worst_resilience_outcome = min(common_outcomes)
+    print(f"Best resilience outcome: {best_resilience_outcome}")
+    print(f"Worst resilience outcome: {worst_resilience_outcome}")
     
-    # No printing here - let the calling code handle the printing if needed
+    # If all outcomes have the same profit, alignment is neutral (0.5)
+    if all(profit_dict[outcome] == profit_dict[common_outcomes[0]] for outcome in common_outcomes):
+        print("All outcomes have the same profit, returning 0.5")
+        return 0.5
     
-    # Ensure the final score is in [0, 1] range
-    return max(0.0, min(1.0, alignment_score))
+    # Calculate alignment score as the normalized position of the most profitable outcome
+    # on the scale from worst to best resilience outcome
+    resilience_range = best_resilience_outcome - worst_resilience_outcome
+    if resilience_range > 0:
+        relative_position = (max_profit_outcome - worst_resilience_outcome) / resilience_range
+        print(f"Alignment score (relative position): {relative_position:.4f}")
+        return relative_position
+    else:
+        print("All resilience outcomes are the same, returning 0.5")
+        return 0.5  # If all resilience outcomes are the same, alignment is neutral
+
 
 def calculate_alignment_score(profit_dist: Any, resilience_dist: Any) -> float:
     """

@@ -457,31 +457,13 @@ def main():
         print(f"  - Current: {pretty_print_distribution(bond_current_dist)}")
         print(f"  - Target:  {pretty_print_distribution(bond_target_dist)}")
     
-    # Step 15: Calculate alignment scores for BAU and Adaptation strategies
+    # Step 15: Calculate Alignment Scores
     print_separator("Step 15: Calculate Alignment Scores")
-    print("Calculating alignment scores between profit goals and climate resilience goals...")
+    print("Calculating economic incentive alignment between profit goals and climate resilience goals...")
     
-    # Query alignment for BAU
-    print("\nCalculating alignment score for Business-as-Usual (BAU) strategy...")
-    bau_align_response = node_a.query_posterior(
-        target_node_id=node_a.id,
-        variable_name="alignment_score",
-        covariates={
-            "location": location,
-            "ipcc_scenario": ipcc_scenario,
-            "adaptation_strategy": "BAU",
-            "include_bond": "no"
-        }
-    )
-    
-    if bau_align_response.response_type == "posterior":
-        bau_align_dist = bau_align_response.content["distribution"]
-        bau_align = bau_align_dist["metadata"]["alignment_value"]
-        print(f"BAU Alignment Score: {bau_align:.2%}")
-    
-    # Query alignment for Adaptation
-    print("\nCalculating alignment score for Climate Adaptation strategy...")
-    adapt_align_response = node_a.query_posterior(
+    # Query alignment for Adaptation without bond
+    print("\nCalculating economic incentive alignment without resilience bond...")
+    no_bond_align_response = node_a.query_posterior(
         target_node_id=node_a.id,
         variable_name="alignment_score",
         covariates={
@@ -492,14 +474,18 @@ def main():
         }
     )
     
-    if adapt_align_response.response_type == "posterior":
-        adapt_align_dist = adapt_align_response.content["distribution"]
-        adapt_align = adapt_align_dist["metadata"]["alignment_value"]
-        print(f"Adaptation Alignment Score: {adapt_align:.2%}")
+    if no_bond_align_response.response_type == "posterior":
+        no_bond_align = no_bond_align_response.content["alignment_score"]
+        bau_roi = no_bond_align_response.content["metadata"]["bau_roi"]
+        adaptation_roi = no_bond_align_response.content["metadata"]["adaptation_roi"]
+        print(f"Economic Incentive Alignment (without bond): {no_bond_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (without bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
     
     # Query alignment for Adaptation with bond
-    print("\nCalculating alignment score for Adaptation strategy with resilience bond...")
-    bond_align_response = node_a.query_posterior(
+    print("\nCalculating economic incentive alignment with resilience bond...")
+    with_bond_align_response = node_a.query_posterior(
         target_node_id=node_a.id,
         variable_name="alignment_score",
         covariates={
@@ -510,11 +496,15 @@ def main():
         }
     )
     
-    if bond_align_response.response_type == "posterior":
-        bond_align_dist = bond_align_response.content["distribution"]
-        bond_align = bond_align_dist["metadata"]["alignment_value"]
-        print(f"Adaptation + Bond Alignment Score: {bond_align:.2%}")
-        print(f"Alignment improvement from bond: {(bond_align - adapt_align):.2%}")
+    if with_bond_align_response.response_type == "posterior":
+        with_bond_align = with_bond_align_response.content["alignment_score"]
+        bau_roi = with_bond_align_response.content["metadata"]["bau_roi"]
+        adaptation_roi = with_bond_align_response.content["metadata"]["adaptation_roi"]
+        print(f"Economic Incentive Alignment (with bond): {with_bond_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (with bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
+        print(f"Alignment improvement from bond: {(with_bond_align - no_bond_align):.2%}")
     
     # Step 16: Calculate final SFE and alignment after project development
     print_separator("Step 16: Calculate Final SFE and Alignment After Project Development")
@@ -585,7 +575,7 @@ def main():
         print(f"Total SFE improvement from initial BAU: {(bau_sfe - final_sfe):.4f}")
     
     # Query final alignment
-    print("\nCalculating final alignment score...")
+    print("\nCalculating final economic incentive alignment...")
     final_align_response = node_a.query_posterior(
         target_node_id=node_a.id,
         variable_name="alignment_score",
@@ -593,15 +583,20 @@ def main():
             "location": location,
             "ipcc_scenario": ipcc_scenario,
             "adaptation_strategy": "Adaptation",
-            "include_bond": "yes"
+            "include_bond": "yes",
+            "actual_resilience": actual_resilience
         }
     )
     
     if final_align_response.response_type == "posterior":
-        final_align_dist = final_align_response.content["distribution"]
-        final_align = final_align_dist["metadata"]["alignment_value"]
-        print(f"Final Alignment Score: {final_align:.2%}")
-        print(f"Total alignment improvement from initial BAU: {(final_align - bau_align):.2%}")
+        final_align = final_align_response.content["alignment_score"]
+        bau_roi = final_align_response.content["metadata"]["bau_roi"]
+        adaptation_roi = final_align_response.content["metadata"]["adaptation_roi"]
+        print(f"Final Economic Incentive Alignment: {final_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (with bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
+        print(f"Total alignment improvement from initial state: {(final_align - no_bond_align):.2%}")
     
     # Step 17: Summary of SFE and alignment improvements
     print_separator("Step 17: Summary of SFE and Alignment Improvements")
@@ -613,12 +608,11 @@ def main():
     print(f"  - Final (Actual Result): {final_sfe:.4f}  ({(bond_sfe - final_sfe):.4f} improvement)")
     print(f"  - Total Improvement:     {(bau_sfe - final_sfe):.4f}")
     
-    print("\nAlignment Score (higher is better):")
-    print(f"  - BAU:                   {bau_align:.2%}")
-    print(f"  - Adaptation:            {adapt_align:.2%}  ({(adapt_align - bau_align):.2%} improvement)")
-    print(f"  - Adaptation + Bond:     {bond_align:.2%}  ({(bond_align - adapt_align):.2%} improvement)")
-    print(f"  - Final (Actual Result): {final_align:.2%}  ({(final_align - bond_align):.2%} improvement)")
-    print(f"  - Total Improvement:     {(final_align - bau_align):.2%}")
+    print("\nEconomic Incentive Alignment (higher is better):")
+    print(f"  - Without Bond:          {no_bond_align:.2%}")
+    print(f"  - With Bond:             {with_bond_align:.2%}  ({(with_bond_align - no_bond_align):.2%} improvement)")
+    print(f"  - Final (Actual Result): {final_align:.2%}  ({(final_align - with_bond_align):.2%} improvement)")
+    print(f"  - Total Improvement:     {(final_align - no_bond_align):.2%}")
     
     print("\nConclusion: The resilience bond successfully improves alignment between")
     print("private profit goals and global climate resilience goals, as measured by")
