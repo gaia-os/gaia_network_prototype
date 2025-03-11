@@ -324,8 +324,12 @@ def main():
         print(f"Bond price: {metadata['bond_price']:.2%}")
         print(f"Expected bond payoff: {metadata['expected_bond_payoff']:.2%}")
         print("\nResilient outcomes and probabilities:")
-        for outcome, prob in zip(metadata['resilience_outcomes'], metadata['outcome_probabilities']):
-            print(f"  - Outcome {outcome:.2f}: {prob:.0%} probability")
+        
+        # Get the resilience distribution from the metadata
+        if 'resilience_distribution' in metadata and 'Adaptation' in metadata['resilience_distribution']:
+            resilience_dist = metadata['resilience_distribution']['Adaptation']
+            for outcome, prob in resilience_dist.items():
+                print(f"  - Outcome {float(outcome):.2f}: {prob:.0%} probability")
         
         print(f"\nROI improvement from bond: {bond_roi - adapt_roi:.2%}")
         print(f"Final ROI difference (Adaptation + Bond - BAU): {bond_roi - bau_roi:.2%}")
@@ -369,6 +373,190 @@ def main():
         print(f"Final project ROI: {final_roi:.2%}")
         print(f"Improvement over initial BAU ROI: {final_roi - bau_roi:.2%}")
     
+    # Step 14: Calculate System Free Energy (SFE)
+    print_separator("Step 14: Calculate System Free Energy (SFE)")
+    print("Calculating System Free Energy (SFE) to measure divergence from target resilience distribution...")
+    
+    # Query SFE for BAU
+    print("\nCalculating SFE for Business-as-Usual (BAU) strategy...")
+    bau_sfe_response = requests.post(
+        f"{node_a_url}/query/system_free_energy",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        }
+    ).json()
+    
+    if bau_sfe_response["response_type"] == "posterior":
+        bau_sfe_dist = bau_sfe_response["content"]["distribution"]
+        bau_sfe = bau_sfe_dist["distribution"]["parameters"]["mean"]
+        bau_current_dist = bau_sfe_dist["metadata"]["current_distribution"]
+        bau_target_dist = bau_sfe_dist["metadata"]["target_distribution"]
+        print(f"BAU System Free Energy: {bau_sfe:.4f}")
+        print("\nBAU Resilience Distribution:")
+        print(f"  - Current: {bau_current_dist}")
+        print(f"  - Target:  {bau_target_dist}")
+    
+    # Query SFE for Adaptation
+    print("\nCalculating SFE for Climate Adaptation strategy...")
+    adapt_sfe_response = requests.post(
+        f"{node_a_url}/query/system_free_energy",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    ).json()
+    
+    if adapt_sfe_response["response_type"] == "posterior":
+        adapt_sfe_dist = adapt_sfe_response["content"]["distribution"]
+        adapt_sfe = adapt_sfe_dist["distribution"]["parameters"]["mean"]
+        adapt_current_dist = adapt_sfe_dist["metadata"]["current_distribution"]
+        adapt_target_dist = adapt_sfe_dist["metadata"]["target_distribution"]
+        print(f"Adaptation System Free Energy: {adapt_sfe:.4f}")
+        print("\nAdaptation Resilience Distribution:")
+        print(f"  - Current: {adapt_current_dist}")
+        print(f"  - Target:  {adapt_target_dist}")
+    
+    # Query SFE for Adaptation with bond
+    print("\nCalculating SFE for Adaptation strategy with resilience bond...")
+    bond_sfe_response = requests.post(
+        f"{node_a_url}/query/system_free_energy",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    ).json()
+    
+    if bond_sfe_response["response_type"] == "posterior":
+        bond_sfe_dist = bond_sfe_response["content"]["distribution"]
+        bond_sfe = bond_sfe_dist["distribution"]["parameters"]["mean"]
+        bond_current_dist = bond_sfe_dist["metadata"]["current_distribution"]
+        bond_target_dist = bond_sfe_dist["metadata"]["target_distribution"]
+        print(f"Adaptation + Bond System Free Energy: {bond_sfe:.4f}")
+        print(f"SFE improvement from bond: {(adapt_sfe - bond_sfe):.4f}")
+        print("\nAdaptation + Bond Resilience Distribution:")
+        print(f"  - Current: {bond_current_dist}")
+        print(f"  - Target:  {bond_target_dist}")
+    
+    # Step 15: Calculate Alignment Scores
+    print_separator("Step 15: Calculate Alignment Scores")
+    print("Calculating economic incentive alignment between profit goals and climate resilience goals...")
+    
+    # Query alignment for Adaptation without bond
+    print("\nCalculating economic incentive alignment without resilience bond...")
+    no_bond_align_response = requests.post(
+        f"{node_a_url}/query/alignment_score",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    ).json()
+    
+    if "alignment_score" in no_bond_align_response["content"]:
+        no_bond_align = no_bond_align_response["content"]["alignment_score"]
+        bau_roi = no_bond_align_response["content"]["metadata"]["bau_roi"]
+        adaptation_roi = no_bond_align_response["content"]["metadata"]["adaptation_roi"]
+        print(f"Economic Incentive Alignment (without bond): {no_bond_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (without bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
+    
+    # Query alignment for Adaptation with bond
+    print("\nCalculating economic incentive alignment with resilience bond...")
+    with_bond_align_response = requests.post(
+        f"{node_a_url}/query/alignment_score",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    ).json()
+    
+    if "alignment_score" in with_bond_align_response["content"]:
+        with_bond_align = with_bond_align_response["content"]["alignment_score"]
+        bau_roi = with_bond_align_response["content"]["metadata"]["bau_roi"]
+        adaptation_roi = with_bond_align_response["content"]["metadata"]["adaptation_roi"]
+        print(f"Economic Incentive Alignment (with bond): {with_bond_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (with bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
+        print(f"Alignment improvement from bond: {(with_bond_align - no_bond_align):.2%}")
+    
+    # Step 16: Calculate final SFE and alignment after project development
+    print_separator("Step 16: Calculate Final SFE and Alignment After Project Development")
+    print("Calculating final SFE and alignment scores based on actual resilience outcome...")
+    
+    print(f"\nActual resilience outcome: {actual_resilience:.2f}")
+    
+    # Query final SFE
+    print("\nCalculating final System Free Energy...")
+    final_sfe_response = requests.post(
+        f"{node_a_url}/query/system_free_energy",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes",
+            "actual_resilience": actual_resilience
+        }
+    ).json()
+    
+    if final_sfe_response["response_type"] == "posterior":
+        final_sfe_dist = final_sfe_response["content"]["distribution"]
+        final_sfe = final_sfe_dist["distribution"]["parameters"]["mean"]
+        final_current_dist = final_sfe_dist["metadata"]["current_distribution"]
+        print(f"Final System Free Energy: {final_sfe:.4f}")
+        print(f"Realized resilience distribution (delta): {final_current_dist}")
+        print(f"Total SFE improvement from initial BAU: {(bau_sfe - final_sfe):.4f}")
+    
+    # Query final alignment
+    print("\nCalculating final economic incentive alignment...")
+    final_align_response = requests.post(
+        f"{node_a_url}/query/alignment_score",
+        json={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes",
+            "actual_resilience": actual_resilience
+        }
+    ).json()
+    
+    if "alignment_score" in final_align_response["content"]:
+        final_align = final_align_response["content"]["alignment_score"]
+        bau_roi = final_align_response["content"]["metadata"]["bau_roi"]
+        adaptation_roi = final_align_response["content"]["metadata"]["adaptation_roi"]
+        print(f"Final Economic Incentive Alignment: {final_align:.2%}")
+        print(f"BAU ROI: {bau_roi:.4f}")
+        print(f"Adaptation ROI (with bond): {adaptation_roi:.4f}")
+        print(f"ROI difference (Adaptation - BAU): {adaptation_roi - bau_roi:.4f}")
+        print(f"Total alignment improvement from initial state: {(final_align - no_bond_align):.2%}")
+    
+    # Step 17: Summary of SFE and alignment improvements
+    print_separator("Step 17: Summary of SFE and Alignment Improvements")
+    print("Summary of System Free Energy (SFE) and alignment improvements:")
+    print("\nSystem Free Energy (lower is better):")
+    print(f"  - BAU:                   {bau_sfe:.4f}")
+    print(f"  - Adaptation:            {adapt_sfe:.4f}  ({(bau_sfe - adapt_sfe):.4f} improvement)")
+    print(f"  - Adaptation + Bond:     {bond_sfe:.4f}  ({(adapt_sfe - bond_sfe):.4f} improvement)")
+    print(f"  - Final (Actual Result): {final_sfe:.4f}  ({(bond_sfe - final_sfe):.4f} improvement)")
+    print(f"  - Total Improvement:     {(bau_sfe - final_sfe):.4f}")
+    
+    print("\nEconomic Incentive Alignment (higher is better):")
+    print(f"  - Without Bond:          {no_bond_align:.2%}")
+    print(f"  - With Bond:             {with_bond_align:.2%}  ({(with_bond_align - no_bond_align):.2%} improvement)")
+    print(f"  - Final (Actual Result): {final_align:.2%}  ({(final_align - with_bond_align):.2%} improvement)")
+    print(f"  - Total Improvement:     {(final_align - no_bond_align):.2%}")
+
     print_separator("Demo Complete")
 
 

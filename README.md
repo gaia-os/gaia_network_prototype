@@ -146,7 +146,35 @@ gaia_network_prototype/
   - Larger bond payoff → Higher ROI
   - Higher ROI → More incentive for adaptation
 
-### Node Interactions and Data Flow
+## System Free Energy and Alignment
+
+The Gaia Network prototype includes measurements to evaluate how well the system aligns private profit incentives with global climate resilience goals:
+
+### System Free Energy (SFE)
+
+- **Definition**: SFE is calculated as the KL divergence between current outcome distributions and target distributions
+- **Interpretation**: Lower SFE indicates better alignment with global climate resilience goals
+- **Measurement Phases**:
+  - Planning Phase: Expected SFE based on projected resilience outcomes
+  - Benefit Realization Phase: Realized SFE based on actual resilience outcomes
+- **Target Distribution**: The ideal distribution of resilience outcomes that prioritizes high resilience
+- **Comparison**: SFE is calculated for BAU, Adaptation, and Adaptation with bond strategies to show improvement
+
+### Economic Incentive Alignment
+
+- **Definition**: Measures how well the project developer's profit goals align with global climate resilience goals
+- **Calculation**: Based on the correlation between profit values and resilience outcomes
+- **Interpretation**: Higher alignment score (0-100%) indicates better coordination between private and public interests
+- **Strategies Compared**:
+  - BAU strategy: Typically shows negative correlation with resilience (low alignment)
+  - Adaptation strategy: Shows positive correlation with resilience (higher alignment)
+  - Adaptation with bond: Shows strong positive correlation (highest alignment)
+
+### Delta Distribution
+
+When the actual resilience outcome is determined after project development, a delta distribution (100% probability on the actual outcome) is used to calculate the final SFE and alignment scores, demonstrating the realized benefits of the resilience bond.
+
+## Node Interactions and Data Flow
 
 - **Node Interactions**: How the nodes work together to calculate ROI:
   - Node A (Finance) queries Node B (Climate) for flood probability
@@ -193,6 +221,10 @@ The demo script (`demo/run_demo.py`) demonstrates the following workflow:
 11. Compare ROI for Business-as-Usual (BAU) vs Adaptation strategies
 12. Consider resilience bond effects for Adaptation strategy
 13. Simulate time passing and project development, including bond payoff calculation
+14. Calculate System Free Energy (SFE) for BAU and Adaptation strategies to measure divergence from target resilience distribution
+15. Calculate economic incentive alignment scores between profit goals and climate resilience goals
+16. Calculate final SFE and alignment after project development based on actual resilience outcome
+17. Summarize SFE and alignment improvements, demonstrating how the resilience bond successfully improves alignment between private profit goals and global climate resilience goals
 
 To run the standard demo:
 
