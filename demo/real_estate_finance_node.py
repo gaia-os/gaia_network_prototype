@@ -131,11 +131,11 @@ class RealEstateFinanceNode(Node):
                 "roi_model": {
                     "base_roi": {
                         "BAU": 0.08,       # 8% base ROI for BAU (standard real estate return)
-                        "Adaptation": 0.05  # 5% base ROI for Adaptation (higher upfront costs)
+                        "Adaptation": 0.02  # 2% base ROI for Adaptation (higher upfront costs)
                     },
                     "flood_impact": {
                         "BAU": 0.12,       # 12% ROI reduction per flood probability for BAU
-                        "Adaptation": 0.05  # 5% ROI reduction per flood probability for Adaptation (more to lose)
+                        "Adaptation": 0.05  # 5% ROI reduction per flood probability for Adaptation (more resilient)
                     },
                     # Unified resilience distribution as dictionaries mapping outcomes to probabilities
                     "resilience_distribution": {
