@@ -18,7 +18,7 @@ from gaia_network.distribution import Distribution, NormalDistribution, BetaDist
 from gaia_network.registry import register_node
 
 from demo.node_handler import NodeHandler
-from demo.sfe_calculator import calculate_sfe, calculate_alignment_score_dict, TARGET_RESILIENCE_DISTRIBUTION
+from demo.sfe_calculator import calculate_sfe, calculate_alignment_score, TARGET_RESILIENCE_DISTRIBUTION
 
 
 class ResilienceBondNode(Node):
@@ -413,7 +413,7 @@ class ResilienceBondNode(Node):
         resilience_dist = covariates.get("resilience_distribution", {})
         
         # Calculate alignment score
-        alignment = calculate_alignment_score_dict(profit_dist, resilience_dist)
+        alignment = calculate_alignment_score(profit_dist, resilience_dist)
         
         # Create response
         return QueryResponse(

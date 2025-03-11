@@ -21,7 +21,7 @@ from gaia_network.distribution import (
 from gaia_network.registry import register_node
 
 from demo.node_handler import NodeHandler
-from demo.sfe_calculator import calculate_sfe, calculate_alignment_score_dict, TARGET_RESILIENCE_DISTRIBUTION, modified_sigmoid
+from demo.sfe_calculator import calculate_sfe, calculate_alignment_score, TARGET_RESILIENCE_DISTRIBUTION, modified_sigmoid
 
 
 class RealEstateFinanceNode(Node):
@@ -162,27 +162,35 @@ class RealEstateFinanceNode(Node):
             id="real_estate_finance_model"
         )
     
-    def _calculate_sfe_and_alignment(self, resilience_distribution: Dict[float, float],
-                                 profit_values: Dict[float, float],
-                                 target_distribution: Dict[float, float]) -> Tuple[float, float]:
-        """Calculate System Free Energy and alignment score for the current scenario.
+    def _calculate_alignment(self, profit_values: Dict[float, float],
+                              resilience_distribution: Dict[float, float]) -> float:
+        """Calculate alignment score only, without SFE.
+        
+        Args:
+            profit_values: Dictionary mapping resilience outcomes to expected profit/ROI
+            resilience_distribution: Dictionary mapping resilience outcomes to their probabilities
+            
+        Returns:
+            Alignment score between 0 and 1
+        """
+        # Calculate alignment score between profit values and resilience distribution
+        alignment = calculate_alignment_score(profit_values, resilience_distribution)
+        return alignment
+
+    def _calculate_sfe(self, resilience_distribution: Dict[float, float],
+                         target_distribution: Dict[float, float]) -> float:
+        """Calculate System Free Energy only, without alignment score.
         
         Args:
             resilience_distribution: Dictionary mapping resilience outcomes to their probabilities
-            profit_values: Dictionary mapping resilience outcomes to expected profit/ROI
             target_distribution: Dictionary mapping resilience outcomes to target probabilities
             
         Returns:
-            Tuple of (sfe, alignment_score)
+            System Free Energy value
         """
         # Calculate SFE as KL divergence between current and target distributions
         sfe = calculate_sfe(resilience_distribution, target_distribution)
-        
-        # Calculate alignment score between profit values and resilience distribution
-        # Pass the full resilience distribution dictionary for proper correlation calculation
-        alignment = calculate_alignment_score_dict(profit_values, resilience_distribution)
-        
-        return sfe, alignment
+        return sfe
 
     def _handle_posterior_query(self, query: Query) -> QueryResponse:
         """Handle a posterior query for the real estate finance model."""
@@ -278,7 +286,7 @@ class RealEstateFinanceNode(Node):
         profit_values = {outcome: dist.parameters["mean"] for outcome, dist in roi_dist.conditional_distributions.items()}
         
         # Calculate SFE
-        sfe = calculate_sfe(resilience_dist, target_dist)
+        sfe = self._calculate_sfe(resilience_dist, target_dist)
         
         # Add ROI comparison metadata to resilience_dist for alignment calculation
         resilience_dist_with_metadata = resilience_dist.copy()
@@ -288,8 +296,8 @@ class RealEstateFinanceNode(Node):
             "adaptation_strategy": adaptation_strategy
         }
         
-        # Calculate alignment score using the function from sfe_calculator
-        alignment = calculate_alignment_score_dict(profit_values, resilience_dist_with_metadata)
+        # Calculate alignment score
+        alignment = self._calculate_alignment(profit_values, resilience_dist_with_metadata)
         
         # Create the response
         return QueryResponse(
@@ -342,18 +350,11 @@ class RealEstateFinanceNode(Node):
             # If an error occurred, return the error response
             return roi_dist
         
-        # Extract profit values from the conditional distributions
-        profit_values = {}
-        for outcome, dist in roi_dist.conditional_distributions.items():
-            profit_values[outcome] = dist.parameters["mean"]
-        
         # Get the global target distribution for climate resilience
         target_distribution = TARGET_RESILIENCE_DISTRIBUTION
         
-        # Calculate SFE using the unmodified resilience distribution
-        sfe, _ = self._calculate_sfe_and_alignment(
-            resilience_distribution, profit_values, target_distribution
-        )
+        # Calculate SFE only, without alignment score calculation
+        sfe = self._calculate_sfe(resilience_distribution, target_distribution)
         
         # Create a distribution for the SFE
         sfe_dist = NormalDistribution(mean=sfe, std=0.01)
