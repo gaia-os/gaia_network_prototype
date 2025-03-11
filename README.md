@@ -62,17 +62,7 @@ gaia_network_prototype/
 
 - **Node**: A probabilistic model that can be queried and updated
 - **Schema**: Defines the state space of a node, including latent variables, observable variables, and covariates
-- **Node Schema**: Structure of each node's state space:
-  - Node A: ROI variables, adaptation choices, bond effects
-  - Node B: Climate scenarios, flood probabilities
-  - Node C: Historical flood and resilience data
-  - Node D: Bond prices, payoff functions, resilience thresholds
 - **State**: The current state of a node, including the values of latent variables and model parameters
-- **State Updates**: How nodes share and update information:
-  - Node A: Updates ROI based on flood risk and bond effects
-  - Node B: Updates flood probabilities based on actuarial data
-  - Node C: Updates historical data and notifies dependent nodes
-  - Node D: Updates bond terms based on market and resilience data
 - **Query**: A request for information from one node to another
 - **Distribution**: A probability distribution representing uncertainty
 - **MarginalDistribution**: A probability distribution for a single variable:
@@ -82,6 +72,16 @@ gaia_network_prototype/
 
 ### Domain Concepts
 
+- **Node Schemas**: Structure of each node's state space:
+  - Node A: ROI variables, adaptation choices, bond effects
+  - Node B: Climate scenarios, flood probabilities
+  - Node C: Historical flood and resilience data
+  - Node D: Bond prices, payoff functions, resilience thresholds
+- **State Updates**: How nodes share and update information:
+  - Node A: Updates ROI based on flood risk and bond effects
+  - Node B: Updates flood probabilities based on actuarial data
+  - Node C: Updates historical data and notifies dependent nodes
+  - Node D: Updates bond terms based on market and resilience data
 - **ROI (Return on Investment)**: The financial return relative to the investment cost:
   - Base ROI: Expected return without considering climate risks
   - Climate-Adjusted ROI: Base ROI - (Flood Probability × Flood Impact)

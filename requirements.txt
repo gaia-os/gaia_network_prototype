@@ -1,5 +1,6 @@
 numpy>=1.20.0
 scipy>=1.7.0
+matplotlib>=3.4.0
 starlette>=0.28.0
 uvicorn>=0.22.0
 pydantic>=2.0.0

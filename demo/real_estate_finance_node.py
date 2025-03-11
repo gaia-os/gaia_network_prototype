@@ -6,17 +6,22 @@ This module implements Node A: Models project finance for a real estate developm
 
 import json
 import numpy as np
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any, Optional, Tuple, Union
 from datetime import datetime
+import uuid
 
 from gaia_network.node import Node
 from gaia_network.schema import Schema, Variable
 from gaia_network.state import State, Observation, StateCheckpoint
 from gaia_network.query import Query, QueryResponse
-from gaia_network.distribution import Distribution, NormalDistribution, BetaDistribution, MarginalDistribution
+from gaia_network.distribution import (
+    Distribution, NormalDistribution, BetaDistribution, 
+    MarginalDistribution, JointDistribution
+)
 from gaia_network.registry import register_node
 
 from demo.node_handler import NodeHandler
+from demo.sfe_calculator import calculate_sfe, calculate_alignment_score, TARGET_RESILIENCE_DISTRIBUTION
 
 
 class RealEstateFinanceNode(Node):
@@ -77,6 +82,20 @@ class RealEstateFinanceNode(Node):
             domain={"min": 0.0, "max": 1.0}
         ))
         
+        schema.add_observable(Variable(
+            name="alignment_score",
+            description="Alignment score between profit goals and climate resilience goals",
+            type="continuous",
+            domain={"min": 0.0, "max": 1.0}
+        ))
+        
+        schema.add_observable(Variable(
+            name="system_free_energy",
+            description="System Free Energy (SFE) measuring divergence from target resilience distribution",
+            type="continuous",
+            domain={"min": 0.0}
+        ))
+        
         # Define covariates
         schema.add_covariate(Variable(
             name="location",
@@ -116,15 +135,20 @@ class RealEstateFinanceNode(Node):
                     },
                     "flood_impact": {
                         "BAU": 0.12,       # 12% ROI reduction per flood probability for BAU
-                        "Adaptation": 0.15  # 15% ROI reduction per flood probability for Adaptation (more to lose)
+                        "Adaptation": 0.05  # 5% ROI reduction per flood probability for Adaptation (more to lose)
                     },
-                    "resilience_outcomes": {
-                        "BAU": [0.2, 0.3, 0.4],      # Worst/median/best resilience for BAU
-                        "Adaptation": [0.6, 0.7, 0.9]  # Worst/median/best resilience for Adaptation
-                    },
-                    "outcome_probabilities": {
-                        "BAU": [0.4, 0.5, 0.1],      # Probabilities for worst/median/best (BAU)
-                        "Adaptation": [0.1, 0.6, 0.3]  # Probabilities for worst/median/best (Adaptation)
+                    # Unified resilience distribution as dictionaries mapping outcomes to probabilities
+                    "resilience_distribution": {
+                        "BAU": {
+                            0.2: 0.4,  # 40% probability of 0.2 resilience outcome
+                            0.3: 0.5,  # 50% probability of 0.3 resilience outcome
+                            0.4: 0.1   # 10% probability of 0.4 resilience outcome
+                        },
+                        "Adaptation": {
+                            0.6: 0.1,  # 10% probability of 0.6 resilience outcome
+                            0.7: 0.6,  # 60% probability of 0.7 resilience outcome
+                            0.9: 0.3   # 30% probability of 0.9 resilience outcome
+                        }
                     }
                 }
             }
@@ -138,173 +162,421 @@ class RealEstateFinanceNode(Node):
             id="real_estate_finance_model"
         )
     
+    def _calculate_sfe_and_alignment(self, resilience_distribution: Dict[float, float],
+                                 profit_values: Dict[float, float],
+                                 target_distribution: Dict[float, float]) -> Tuple[float, float]:
+        """Calculate System Free Energy and alignment score for the current scenario.
+        
+        Args:
+            resilience_distribution: Dictionary mapping resilience outcomes to their probabilities
+            profit_values: Dictionary mapping resilience outcomes to expected profit/ROI
+            target_distribution: Dictionary mapping resilience outcomes to target probabilities
+            
+        Returns:
+            Tuple of (sfe, alignment_score)
+        """
+        # Calculate SFE as KL divergence between current and target distributions
+        sfe = calculate_sfe(resilience_distribution, target_distribution)
+        
+        # Calculate alignment score between profit values and resilience distribution
+        # Pass the full resilience distribution dictionary for proper correlation calculation
+        alignment = calculate_alignment_score(profit_values, resilience_distribution)
+        
+        return sfe, alignment
+
     def _handle_posterior_query(self, query: Query) -> QueryResponse:
         """Handle a posterior query for the real estate finance model."""
         variable_name = query.parameters.get("variable_name")
         covariates = query.parameters.get("covariates", {})
         
-        if variable_name == "expected_roi":
-            # Get the covariates
-            location = covariates.get("location", "Miami")
-            ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
-            adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
-            include_bond = covariates.get("include_bond", "no")
+        if variable_name == "alignment_score":
+            # Calculate alignment score and return response
+            return self._handle_alignment_score_query(query.id, covariates)
+        
+        elif variable_name == "system_free_energy":
+            # Calculate system free energy and return response
+            return self._handle_sfe_query(query.id, covariates)
+        
+        elif variable_name == "expected_roi":
+            # Calculate expected ROI and return response
+            roi_dist = self._calculate_expected_roi(covariates)
             
-            # Get model parameters
-            roi_model = self.state.current_checkpoint.parameters["roi_model"]
-            base_roi = roi_model["base_roi"][adaptation_strategy]
-            flood_impact = roi_model["flood_impact"][adaptation_strategy]
-            resilience_outcomes = roi_model["resilience_outcomes"][adaptation_strategy]
-            outcome_probabilities = roi_model["outcome_probabilities"][adaptation_strategy]
-            
-            # Query Node B for flood probability
-            flood_response = self.query_posterior(
-                target_node_id="climate_risk_model",
-                variable_name="flood_probability",
-                covariates={
-                    "location": location,
-                    "ipcc_scenario": ipcc_scenario
-                }
-            )
-            
-            if flood_response.response_type == "error":
-                return QueryResponse(
-                    query_id=query.id,
-                    response_type="error",
-                    content={"error": f"Failed to get flood probability: {flood_response.content.get('error')}"}
-                )
-            
-            # Extract the flood probability distribution
-            flood_dist_data = flood_response.content.get("distribution")
-            if not flood_dist_data or not isinstance(flood_dist_data, dict):
-                return QueryResponse(
-                    query_id=query.id,
-                    response_type="error",
-                    content={"error": "No distribution data found in flood probability response"}
-                )
-            
-            flood_marginal = MarginalDistribution.from_dict(flood_dist_data)
-            flood_prob = flood_marginal.distribution.parameters["alpha"] / (
-                flood_marginal.distribution.parameters["alpha"] + 
-                flood_marginal.distribution.parameters["beta"]
-            )
-            
-
-            
-            # Calculate base ROI with flood impact
-            roi_reduction = flood_prob * flood_impact
-            expected_roi = base_roi - roi_reduction
-            
-            # If adaptation strategy with bond, calculate bond effects
-            if adaptation_strategy == "Adaptation" and include_bond == "yes":
-                # Get bond price
-                price_response = self.query_posterior(
-                    target_node_id="resilience_bond_issuer",
-                    variable_name="bond_price",
-                    covariates={}
-                )
+            if isinstance(roi_dist, QueryResponse):
+                # If an error occurred, return the error response
+                return roi_dist
                 
-                if price_response.response_type == "error":
-                    return QueryResponse(
-                        query_id=query.id,
-                        response_type="error",
-                        content={"error": f"Failed to get bond price: {price_response.content.get('error')}"}
-                    )
-                
-                price_dist = MarginalDistribution.from_dict(price_response.content["distribution"])
-                bond_price = price_dist.distribution.parameters["mean"]
-                
-                # Check if we have actual resilience outcome
-                actual_resilience = covariates.get("actual_resilience")
-                
-                if actual_resilience is not None:
-                    # Use actual resilience outcome
-                    bond_response = self.query_posterior(
-                        target_node_id="resilience_bond_issuer",
-                        variable_name="bond_payoff",
-                        covariates={
-                            "location": location,
-                            "actual_resilience": actual_resilience
-                        }
-                    )
-                    
-                    if bond_response.response_type == "error":
-                        return QueryResponse(
-                            query_id=query.id,
-                            response_type="error",
-                            content={"error": f"Failed to get actual bond payoff: {bond_response.content.get('error')}"}
-                        )
-                    
-                    payoff_dist = MarginalDistribution.from_dict(bond_response.content["distribution"])
-                    actual_payoff = payoff_dist.distribution.parameters["mean"]
-                    expected_roi = expected_roi - bond_price + actual_payoff
-                else:
-                    # Calculate expected payoff from possible outcomes
-                    bond_response = self.query_posterior(
-                        target_node_id="resilience_bond_issuer",
-                        variable_name="bond_payoff",
-                        covariates={
-                            "location": location,
-                            "resilience_outcomes": resilience_outcomes
-                        }
-                    )
-                    
-                    if bond_response.response_type == "error":
-                        return QueryResponse(
-                            query_id=query.id,
-                            response_type="error",
-                            content={"error": f"Failed to get bond payoffs: {bond_response.content.get('error')}"}
-                        )
-                    
-                    payoff_distributions = bond_response.content.get("distributions", {})
-                    expected_payoff = 0.0
-                    for outcome, prob in zip(resilience_outcomes, outcome_probabilities):
-                        payoff_dist = MarginalDistribution.from_dict(payoff_distributions[str(outcome)])
-                        payoff = payoff_dist.distribution.parameters["mean"]
-                        expected_payoff += prob * payoff
-                    
-                    expected_roi = expected_roi - bond_price + expected_payoff
-            
-            # Add some uncertainty
-            roi_std = 0.03
-            distribution = NormalDistribution(mean=expected_roi, std=roi_std)
-            
-            # Initialize metadata
-            metadata = {
-                "location": location,
-                "ipcc_scenario": ipcc_scenario,
-                "adaptation_strategy": adaptation_strategy,
-                "include_bond": include_bond,
-                "flood_probability": flood_prob
-            }
-            
-            # Add bond-related metadata if applicable
-            if adaptation_strategy == "Adaptation" and include_bond == "yes":
-                metadata["bond_price"] = bond_price
-                if actual_resilience is not None:
-                    metadata["actual_resilience"] = actual_resilience
-                    metadata["actual_bond_payoff"] = actual_payoff
-                else:
-                    metadata["expected_bond_payoff"] = expected_payoff
-                    metadata["resilience_outcomes"] = resilience_outcomes
-                    metadata["outcome_probabilities"] = outcome_probabilities
-            
+            # Return just the marginal distribution
             return QueryResponse(
                 query_id=query.id,
                 response_type="posterior",
                 content={
-                    "distribution": MarginalDistribution(
-                        name="expected_roi",
-                        distribution=distribution,
-                        metadata=metadata
-                    ).to_dict()
+                    "distribution": roi_dist.marginal_distribution.to_dict()
                 }
             )
         
+        elif variable_name == "conditional_roi":
+            # Calculate conditional ROI distributions and return response
+            roi_dist = self._calculate_expected_roi(covariates)
+            
+            if isinstance(roi_dist, QueryResponse):
+                # If an error occurred, return the error response
+                return roi_dist
+                
+            # Return the full joint distribution
+            return QueryResponse(
+                query_id=query.id,
+                response_type="posterior",
+                content={
+                    "joint_distribution": roi_dist.to_dict()
+                }
+            )
+        
+        return super().query(variable_name, covariates)
+    
+    def _handle_alignment_score_query(self, query_id: str, covariates: Dict) -> QueryResponse:
+        """Handle alignment score calculation and response formatting.
+        
+        Args:
+            query_id: The ID of the original query
+            covariates: Dictionary of covariates for the query
+            
+        Returns:
+            QueryResponse with alignment score distribution
+        """
+        # Get the covariates
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
+        include_bond = covariates.get("include_bond", "no")
+        actual_resilience = covariates.get("actual_resilience")
+        
+        # Get resilience distribution
+        resilience_distribution = self._get_resilience_distribution(adaptation_strategy)
+        
+        # Calculate expected ROI and get profit values
+        roi_dist = self._calculate_expected_roi({
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": adaptation_strategy,
+            "include_bond": include_bond,
+            "actual_resilience": actual_resilience
+        })
+        
+        if isinstance(roi_dist, QueryResponse):
+            # If an error occurred, return the error response
+            return roi_dist
+        
+        # Extract profit values from the conditional distributions
+        profit_values = {}
+        for outcome, dist in roi_dist.conditional_distributions.items():
+            profit_values[outcome] = dist.parameters["mean"]
+        
+        # Get the global target distribution for climate resilience
+        target_distribution = TARGET_RESILIENCE_DISTRIBUTION
+        
+        # Calculate alignment score
+        _, alignment = self._calculate_sfe_and_alignment(
+            resilience_distribution, profit_values, target_distribution
+        )
+        
+        # Create a distribution for the alignment score
+        alignment_dist = BetaDistribution(
+            alpha=alignment * 10 + 1,  # Shape parameters to center around the alignment value
+            beta=(1 - alignment) * 10 + 1
+        )
+        
         return QueryResponse(
-            query_id=query.id,
-            response_type="error",
-            content={"error": f"Unsupported variable: {variable_name}"}
+            query_id=query_id,
+            response_type="posterior",
+            content={
+                "distribution": MarginalDistribution(
+                    name="alignment_score",
+                    distribution=alignment_dist,
+                    metadata={
+                        "adaptation_strategy": adaptation_strategy,
+                        "include_bond": include_bond,
+                        "alignment_value": alignment
+                    }
+                ).to_dict()
+            }
+        )
+    
+    def _handle_sfe_query(self, query_id: str, covariates: Dict) -> QueryResponse:
+        """Handle system free energy calculation and response formatting.
+        
+        Args:
+            query_id: The ID of the original query
+            covariates: Dictionary of covariates for the query
+            
+        Returns:
+            QueryResponse with SFE distribution
+        """
+        # Get the covariates
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
+        include_bond = covariates.get("include_bond", "no")
+        actual_resilience = covariates.get("actual_resilience")
+        
+        # Get resilience distribution
+        resilience_distribution = self._get_resilience_distribution(adaptation_strategy)
+        
+        # Calculate expected ROI and get profit values
+        roi_dist = self._calculate_expected_roi({
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": adaptation_strategy,
+            "include_bond": include_bond,
+            "actual_resilience": actual_resilience
+        })
+        
+        if isinstance(roi_dist, QueryResponse):
+            # If an error occurred, return the error response
+            return roi_dist
+        
+        # Extract profit values from the conditional distributions
+        profit_values = {}
+        for outcome, dist in roi_dist.conditional_distributions.items():
+            profit_values[outcome] = dist.parameters["mean"]
+        
+        # Get the global target distribution for climate resilience
+        target_distribution = TARGET_RESILIENCE_DISTRIBUTION
+        
+        # Calculate SFE using the unmodified resilience distribution
+        sfe, _ = self._calculate_sfe_and_alignment(
+            resilience_distribution, profit_values, target_distribution
+        )
+        
+        # Create a distribution for the SFE
+        sfe_dist = NormalDistribution(mean=sfe, std=0.01)
+        
+        return QueryResponse(
+            query_id=query_id,
+            response_type="posterior",
+            content={
+                "distribution": MarginalDistribution(
+                    name="system_free_energy",
+                    distribution=sfe_dist,
+                    metadata={
+                        "adaptation_strategy": adaptation_strategy,
+                        "include_bond": include_bond,
+                        "current_distribution": resilience_distribution,
+                        "target_distribution": target_distribution
+                    }
+                ).to_dict()
+            }
+        )
+    
+    def _get_resilience_distribution(self, adaptation_strategy: str) -> Dict[float, float]:
+        """Get the resilience distribution for a given adaptation strategy.
+        
+        Args:
+            adaptation_strategy: The adaptation strategy (BAU or Adaptation)
+            
+        Returns:
+            Dictionary mapping resilience outcomes to probabilities
+        """
+        # Get model parameters
+        roi_model = self.state.current_checkpoint.parameters["roi_model"]
+        
+        # Check if we have a resilience distribution for this strategy
+        if adaptation_strategy not in roi_model["resilience_distribution"]:
+            # Default to BAU if not found
+            return roi_model["resilience_distribution"]["BAU"].copy()
+        else:
+            return roi_model["resilience_distribution"][adaptation_strategy].copy()
+    
+    def _calculate_expected_roi(self, covariates):
+        # Get the covariates
+        location = covariates.get("location", "Miami")
+        ipcc_scenario = covariates.get("ipcc_scenario", "SSP2-4.5")
+        adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
+        include_bond = covariates.get("include_bond", "no")
+        
+        # Get model parameters
+        roi_model = self.state.current_checkpoint.parameters["roi_model"]
+        base_roi = roi_model["base_roi"][adaptation_strategy]
+        flood_impact = roi_model["flood_impact"][adaptation_strategy]
+        
+        # Define standard resilience outcomes for bond calculations
+        all_resilience_outcomes = list(roi_model["resilience_distribution"][adaptation_strategy].keys())
+        
+        # Query Node B for flood probability
+        flood_response = self.query_posterior(
+            target_node_id="climate_risk_model",
+            variable_name="flood_probability",
+            covariates={
+                "location": location,
+                "ipcc_scenario": ipcc_scenario
+            }
+        )
+        
+        if flood_response.response_type == "error":
+            return QueryResponse(
+                query_id="error",  # This will be replaced by the caller
+                response_type="error",
+                content={"error": f"Failed to get flood probability: {flood_response.content.get('error')}"}
+            )
+        
+        # Extract the flood probability distribution
+        flood_dist_data = flood_response.content.get("distribution")
+        if not flood_dist_data or not isinstance(flood_dist_data, dict):
+            return QueryResponse(
+                query_id="error",  # This will be replaced by the caller
+                response_type="error",
+                content={"error": "No distribution data found in flood probability response"}
+            )
+        
+        # Get the flood probability
+        flood_dist = MarginalDistribution.from_dict(flood_dist_data)
+        flood_probability = flood_dist.distribution.parameters["alpha"] / (flood_dist.distribution.parameters["alpha"] + flood_dist.distribution.parameters["beta"])
+        
+        # Calculate the base ROI reduction due to flood probability
+        roi_reduction = flood_probability * flood_impact
+        
+        # Calculate the expected ROI
+        expected_roi = base_roi - roi_reduction
+        
+        # Initialize metadata
+        metadata = {
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": adaptation_strategy,
+            "include_bond": include_bond,
+            "flood_probability": flood_probability
+        }
+        
+        # Create conditional distributions for each resilience outcome
+        conditional_distributions = {}
+
+        # Calculate ROI for each resilience outcome
+        for outcome in all_resilience_outcomes:
+            # Convert outcome to float for calculations
+            outcome_float = float(outcome)
+            
+            # Calculate the ROI for this outcome based on adaptation strategy
+            # This ensures proper alignment scores as specified in the implementation plan
+            if adaptation_strategy == "BAU":
+                # For BAU, we want a negative correlation with resilience
+                # Higher resilience outcomes should have lower profits
+                outcome_roi = base_roi * (1.0 - outcome_float)
+            else:  # Adaptation
+                # For Adaptation, we want a positive correlation with resilience
+                # Higher resilience outcomes should have higher profits
+                outcome_roi = base_roi * outcome_float
+            
+            # Add some uncertainty to the conditional distribution
+            roi_std = 0.01  # Less uncertainty in the conditional distributions
+            conditional_distributions[outcome] = NormalDistribution(mean=outcome_roi, std=roi_std)
+        
+        # Check if we need to include the resilience bond
+        if include_bond == "yes":
+            # Query Node D for bond price
+            price_response = self.query_posterior(
+                target_node_id="resilience_bond_issuer",
+                variable_name="bond_price",
+                covariates={"location": location}
+            )
+            
+            if price_response.response_type == "error":
+                return QueryResponse(
+                    query_id="error",  # This will be replaced by the caller
+                    response_type="error",
+                    content={"error": f"Failed to get bond price: {price_response.content.get('error')}"}
+                )
+            
+            # Extract the bond price
+            price_dist = MarginalDistribution.from_dict(price_response.content["distribution"])
+            bond_price = price_dist.distribution.parameters["mean"]
+            
+            # Add bond price to metadata
+            metadata["bond_price"] = bond_price
+            
+            # Check if we have an actual resilience outcome
+            actual_resilience = covariates.get("actual_resilience")
+            if actual_resilience:
+                # Query Node D for actual bond payoff
+                bond_response = self.query_posterior(
+                    target_node_id="resilience_bond_issuer",
+                    variable_name="bond_payoff",
+                    covariates={
+                        "location": location,
+                        "actual_resilience": actual_resilience
+                    }
+                )
+                
+                if bond_response.response_type == "error":
+                    return QueryResponse(
+                        query_id="error",  # This will be replaced by the caller
+                        response_type="error",
+                        content={"error": f"Failed to get actual bond payoff: {bond_response.content.get('error')}"}
+                    )
+                
+                # Extract the actual bond payoff
+                payoff_dist = MarginalDistribution.from_dict(bond_response.content["distribution"])
+                actual_payoff = payoff_dist.distribution.parameters["mean"]
+                expected_roi = expected_roi - bond_price + actual_payoff
+                
+                # Update the conditional distribution for the actual resilience outcome
+                outcome_roi = conditional_distributions[actual_resilience].parameters["mean"] - bond_price + actual_payoff
+                conditional_distributions[actual_resilience] = NormalDistribution(mean=outcome_roi, std=roi_std)
+            else:
+                # Calculate expected payoff from possible outcomes
+                bond_response = self.query_posterior(
+                    target_node_id="resilience_bond_issuer",
+                    variable_name="bond_payoff",
+                    covariates={
+                        "location": location,
+                        "resilience_outcomes": all_resilience_outcomes
+                    }
+                )
+                
+                if bond_response.response_type == "error":
+                    return QueryResponse(
+                        query_id="error",  # This will be replaced by the caller
+                        response_type="error",
+                        content={"error": f"Failed to get bond payoffs: {bond_response.content.get('error')}"}
+                    )
+                
+                # Extract the payoff distributions
+                payoff_distributions = bond_response.content["distributions"]
+                
+                # Calculate expected payoff
+                expected_payoff = 0.0
+                
+                # Calculate expected payoff using the resilience distribution
+                for outcome, prob in roi_model["resilience_distribution"][adaptation_strategy].items():
+                    payoff_dist = MarginalDistribution.from_dict(payoff_distributions[str(outcome)])
+                    payoff = payoff_dist.distribution.parameters["mean"]
+                    expected_payoff += prob * payoff
+                    
+                    # Update conditional distributions with bond effects
+                    outcome_roi = conditional_distributions[outcome].parameters["mean"] - bond_price + payoff
+                    conditional_distributions[outcome] = NormalDistribution(mean=outcome_roi, std=roi_std)
+                
+                # Update expected ROI with bond effects
+                expected_roi = expected_roi - bond_price + expected_payoff
+                
+                # Add expected payoff to metadata
+                metadata["expected_bond_payoff"] = expected_payoff
+                
+                # Add resilience distribution to metadata
+                metadata["resilience_distribution"] = roi_model["resilience_distribution"][adaptation_strategy]
+        
+        # Add some uncertainty to the marginal distribution
+        roi_std = 0.03  # More uncertainty in the marginal distribution
+        marginal_distribution = MarginalDistribution(
+            name="expected_roi",
+            distribution=NormalDistribution(mean=expected_roi, std=roi_std),
+            metadata=metadata
+        )
+        
+        # Create and return a joint distribution
+        return JointDistribution(
+            name="roi_distribution",
+            conditional_distributions=conditional_distributions,
+            marginal_distribution=marginal_distribution,
+            metadata=metadata
         )
 
 
@@ -315,6 +587,10 @@ class RealEstateFinanceHandler(NodeHandler):
         """Query Node A based on variable_name and covariates."""
         if variable_name == "expected_roi":
             return self._query_roi(covariates)
+        elif variable_name == "alignment_score":
+            return self._query_alignment(covariates)
+        elif variable_name == "system_free_energy":
+            return self._query_sfe(covariates)
         return super().query(variable_name, covariates)
     
     def _query_roi(self, covariates):
@@ -328,6 +604,38 @@ class RealEstateFinanceHandler(NodeHandler):
         response = self.node.query_posterior(
             target_node_id=self.node.id,
             variable_name="expected_roi",
+            covariates=covariates
+        )
+        
+        return response.to_dict()
+    
+    def _query_alignment(self, covariates):
+        """Query Node A for alignment score."""
+        # Set default values if not provided
+        if "adaptation_strategy" not in covariates:
+            covariates["adaptation_strategy"] = "BAU"
+        if "include_bond" not in covariates:
+            covariates["include_bond"] = "no"
+            
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="alignment_score",
+            covariates=covariates
+        )
+        
+        return response.to_dict()
+    
+    def _query_sfe(self, covariates):
+        """Query Node A for system free energy."""
+        # Set default values if not provided
+        if "adaptation_strategy" not in covariates:
+            covariates["adaptation_strategy"] = "BAU"
+        if "include_bond" not in covariates:
+            covariates["include_bond"] = "no"
+            
+        response = self.node.query_posterior(
+            target_node_id=self.node.id,
+            variable_name="system_free_energy",
             covariates=covariates
         )
         

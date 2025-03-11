@@ -14,7 +14,9 @@ import json
 import time
 from pprint import pprint
 
+from gaia_network.state import Observation
 from demo.model_nodes import create_demo_nodes
+from demo.sfe_calculator import pretty_print_distribution
 
 
 def print_separator(title):
@@ -325,7 +327,7 @@ def main():
         print(f"Bond price: {metadata['bond_price']:.2%}")
         print(f"Expected bond payoff: {metadata['expected_bond_payoff']:.2%}")
         print("\nResilient outcomes and probabilities:")
-        for outcome, prob in zip(metadata['resilience_outcomes'], metadata['outcome_probabilities']):
+        for outcome, prob in metadata['resilience_distribution'].items():
             print(f"  - Outcome {outcome:.2f}: {prob:.0%} probability")
         
         print(f"\nROI improvement from bond: {(bond_roi - adapt_roi):.2%}")
@@ -380,6 +382,247 @@ def main():
         final_roi = final_dist["distribution"]["parameters"]["mean"]
         print(f"Final project ROI: {final_roi:.2%}")
         print(f"Improvement over initial BAU ROI: {(final_roi - bau_roi):.2%}")
+    
+    # Step 14: Calculate System Free Energy (SFE) for BAU and Adaptation strategies
+    print_separator("Step 14: Calculate System Free Energy (SFE)")
+    print("Calculating System Free Energy (SFE) to measure divergence from target resilience distribution...")
+    
+    # Query SFE for BAU
+    print("\nCalculating SFE for Business-as-Usual (BAU) strategy...")
+    bau_sfe_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="system_free_energy",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        }
+    )
+    
+    if bau_sfe_response.response_type == "posterior":
+        bau_sfe_dist = bau_sfe_response.content["distribution"]
+        bau_sfe = bau_sfe_dist["distribution"]["parameters"]["mean"]
+        bau_current_dist = bau_sfe_dist["metadata"]["current_distribution"]
+        bau_target_dist = bau_sfe_dist["metadata"]["target_distribution"]
+        print(f"BAU System Free Energy: {bau_sfe:.4f}")
+        print("\nBAU Resilience Distribution:")
+        print(f"  - Current: {pretty_print_distribution(bau_current_dist)}")
+        print(f"  - Target:  {pretty_print_distribution(bau_target_dist)}")
+    
+    # Query SFE for Adaptation
+    print("\nCalculating SFE for Climate Adaptation strategy...")
+    adapt_sfe_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="system_free_energy",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    )
+    
+    if adapt_sfe_response.response_type == "posterior":
+        adapt_sfe_dist = adapt_sfe_response.content["distribution"]
+        adapt_sfe = adapt_sfe_dist["distribution"]["parameters"]["mean"]
+        adapt_current_dist = adapt_sfe_dist["metadata"]["current_distribution"]
+        adapt_target_dist = adapt_sfe_dist["metadata"]["target_distribution"]
+        print(f"Adaptation System Free Energy: {adapt_sfe:.4f}")
+        print("\nAdaptation Resilience Distribution:")
+        print(f"  - Current: {pretty_print_distribution(adapt_current_dist)}")
+        print(f"  - Target:  {pretty_print_distribution(adapt_target_dist)}")
+    
+    # Query SFE for Adaptation with bond
+    print("\nCalculating SFE for Adaptation strategy with resilience bond...")
+    bond_sfe_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="system_free_energy",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    )
+    
+    if bond_sfe_response.response_type == "posterior":
+        bond_sfe_dist = bond_sfe_response.content["distribution"]
+        bond_sfe = bond_sfe_dist["distribution"]["parameters"]["mean"]
+        bond_current_dist = bond_sfe_dist["metadata"]["current_distribution"]
+        bond_target_dist = bond_sfe_dist["metadata"]["target_distribution"]
+        print(f"Adaptation + Bond System Free Energy: {bond_sfe:.4f}")
+        print(f"SFE improvement from bond: {(adapt_sfe - bond_sfe):.4f}")
+        print("\nAdaptation + Bond Resilience Distribution:")
+        print(f"  - Current: {pretty_print_distribution(bond_current_dist)}")
+        print(f"  - Target:  {pretty_print_distribution(bond_target_dist)}")
+    
+    # Step 15: Calculate alignment scores for BAU and Adaptation strategies
+    print_separator("Step 15: Calculate Alignment Scores")
+    print("Calculating alignment scores between profit goals and climate resilience goals...")
+    
+    # Query alignment for BAU
+    print("\nCalculating alignment score for Business-as-Usual (BAU) strategy...")
+    bau_align_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="alignment_score",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "BAU",
+            "include_bond": "no"
+        }
+    )
+    
+    if bau_align_response.response_type == "posterior":
+        bau_align_dist = bau_align_response.content["distribution"]
+        bau_align = bau_align_dist["metadata"]["alignment_value"]
+        print(f"BAU Alignment Score: {bau_align:.2%}")
+    
+    # Query alignment for Adaptation
+    print("\nCalculating alignment score for Climate Adaptation strategy...")
+    adapt_align_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="alignment_score",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "no"
+        }
+    )
+    
+    if adapt_align_response.response_type == "posterior":
+        adapt_align_dist = adapt_align_response.content["distribution"]
+        adapt_align = adapt_align_dist["metadata"]["alignment_value"]
+        print(f"Adaptation Alignment Score: {adapt_align:.2%}")
+    
+    # Query alignment for Adaptation with bond
+    print("\nCalculating alignment score for Adaptation strategy with resilience bond...")
+    bond_align_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="alignment_score",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    )
+    
+    if bond_align_response.response_type == "posterior":
+        bond_align_dist = bond_align_response.content["distribution"]
+        bond_align = bond_align_dist["metadata"]["alignment_value"]
+        print(f"Adaptation + Bond Alignment Score: {bond_align:.2%}")
+        print(f"Alignment improvement from bond: {(bond_align - adapt_align):.2%}")
+    
+    # Step 16: Calculate final SFE and alignment after project development
+    print_separator("Step 16: Calculate Final SFE and Alignment After Project Development")
+    print("Calculating final SFE and alignment scores based on actual resilience outcome...")
+    
+    # Create updated outcome probabilities based on actual resilience
+    # In a real system, this would come from actual measurements
+    # Here we simulate by creating a distribution more concentrated around the actual outcome
+    print(f"\nActual resilience outcome: {actual_resilience:.2f}")
+    
+    # Add an observation to the real estate finance node about the actual resilience
+    observation = Observation(
+        variable_name="actual_resilience",
+        value=actual_resilience,
+        metadata={"location": location, "ipcc_scenario": ipcc_scenario}
+    )
+    node_a.state.add_observation(observation)
+    
+    # Create a delta distribution for the actual resilience outcome
+    # A delta distribution puts 100% probability on the actual outcome
+    # First, determine which resilience outcome bin the actual resilience falls into
+    roi_model = node_a.state.current_checkpoint.parameters["roi_model"]
+    resilience_distribution = roi_model["resilience_distribution"]["Adaptation"]
+    
+    # Find the closest resilience outcome to the actual resilience
+    closest_outcome = min(resilience_distribution.keys(), 
+                          key=lambda outcome: abs(float(outcome) - actual_resilience))
+    
+    # Create a delta distribution (all probability mass on the actual outcome)
+    delta_distribution = {outcome: 0.0 for outcome in resilience_distribution.keys()}
+    delta_distribution[closest_outcome] = 1.0
+    
+    # Add an observation about the updated resilience distribution
+    observation = Observation(
+        variable_name="resilience_distribution",
+        value={"Adaptation": delta_distribution},  # Delta distribution on the actual outcome
+        metadata={"adaptation_strategy": "Adaptation"}
+    )
+    node_a.state.add_observation(observation)
+    
+    # We'll use the global TARGET_RESILIENCE_DISTRIBUTION as our target
+    # This represents the ideal distribution of resilience outcomes
+    # No need to override it with a delta distribution
+    
+    # Query final SFE
+    print("\nCalculating final System Free Energy...")
+    final_sfe_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="system_free_energy",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    )
+    
+    if final_sfe_response.response_type == "posterior":
+        final_sfe_dist = final_sfe_response.content["distribution"]
+        final_sfe = final_sfe_dist["distribution"]["parameters"]["mean"]
+        final_current_dist = final_sfe_dist["metadata"]["current_distribution"]
+        print(f"Final System Free Energy: {final_sfe:.4f}")
+        if isinstance(final_current_dist, dict):
+            print(f"Realized resilience distribution (delta): {pretty_print_distribution(final_current_dist)}")
+        else:
+            # Handle the case where it might still be a list in some contexts
+            print(f"Realized resilience distribution (delta): {[f'{p:.2f}' for p in final_current_dist]}")
+        print(f"Total SFE improvement from initial BAU: {(bau_sfe - final_sfe):.4f}")
+    
+    # Query final alignment
+    print("\nCalculating final alignment score...")
+    final_align_response = node_a.query_posterior(
+        target_node_id=node_a.id,
+        variable_name="alignment_score",
+        covariates={
+            "location": location,
+            "ipcc_scenario": ipcc_scenario,
+            "adaptation_strategy": "Adaptation",
+            "include_bond": "yes"
+        }
+    )
+    
+    if final_align_response.response_type == "posterior":
+        final_align_dist = final_align_response.content["distribution"]
+        final_align = final_align_dist["metadata"]["alignment_value"]
+        print(f"Final Alignment Score: {final_align:.2%}")
+        print(f"Total alignment improvement from initial BAU: {(final_align - bau_align):.2%}")
+    
+    # Step 17: Summary of SFE and alignment improvements
+    print_separator("Step 17: Summary of SFE and Alignment Improvements")
+    print("Summary of System Free Energy (SFE) and alignment improvements:")
+    print("\nSystem Free Energy (lower is better):")
+    print(f"  - BAU:                   {bau_sfe:.4f}")
+    print(f"  - Adaptation:            {adapt_sfe:.4f}  ({(bau_sfe - adapt_sfe):.4f} improvement)")
+    print(f"  - Adaptation + Bond:     {bond_sfe:.4f}  ({(adapt_sfe - bond_sfe):.4f} improvement)")
+    print(f"  - Final (Actual Result): {final_sfe:.4f}  ({(bond_sfe - final_sfe):.4f} improvement)")
+    print(f"  - Total Improvement:     {(bau_sfe - final_sfe):.4f}")
+    
+    print("\nAlignment Score (higher is better):")
+    print(f"  - BAU:                   {bau_align:.2%}")
+    print(f"  - Adaptation:            {adapt_align:.2%}  ({(adapt_align - bau_align):.2%} improvement)")
+    print(f"  - Adaptation + Bond:     {bond_align:.2%}  ({(bond_align - adapt_align):.2%} improvement)")
+    print(f"  - Final (Actual Result): {final_align:.2%}  ({(final_align - bond_align):.2%} improvement)")
+    print(f"  - Total Improvement:     {(final_align - bau_align):.2%}")
+    
+    print("\nConclusion: The resilience bond successfully improves alignment between")
+    print("private profit goals and global climate resilience goals, as measured by")
+    print("reduced System Free Energy and increased alignment score.")
     
     print_separator("Demo Complete")
 
