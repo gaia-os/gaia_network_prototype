@@ -191,48 +191,46 @@ def calculate_sfe(current_dist: Any, target_dist: Any) -> float:
         raise ValueError(f"Unsupported distribution types: {type(current_dist)} and {type(target_dist)}")
 
 
-def calculate_alignment_score(profit_dist: Dict[float, float], resilience_dist: Dict[float, float]) -> float:
+def calculate_alignment_score(roi_data: Dict[str, float]) -> float:
     """
-    Calculate alignment score between profit distribution and resilience distribution using dictionary format.
+    Calculate alignment score based on ROI comparison between BAU and Adaptation strategies.
     
     The alignment score measures how well the profit incentives align with better resilience outcomes.
     A score of 1.0 means perfect alignment (profit-maximizing behavior leads to best resilience outcomes).
     A score of 0.0 means no alignment (profit-maximizing behavior leads to worst resilience outcomes).
     
     Args:
-        profit_dist: Dictionary mapping resilience outcomes to profit values
-        resilience_dist: Dictionary mapping resilience outcomes to probabilities
+        roi_data: Dictionary containing ROI data with keys 'bau_roi' and 'adaptation_roi'
         
     Returns:
         Alignment score between 0 and 1, where 1 is perfect alignment
     """
     
-    # Check if we have additional metadata for economic incentive calculation
-    if isinstance(resilience_dist, dict) and "metadata" in resilience_dist:
-        metadata = resilience_dist["metadata"]
-        if "adaptation_strategy" in metadata and "bau_roi" in metadata and "adaptation_roi" in metadata:
-            # Use economic incentive alignment based on marginal ROI comparison
-            bau_roi = metadata["bau_roi"]
-            adaptation_roi = metadata["adaptation_roi"]
-            
-            # Calculate the alignment score based on the ROI difference
-            # Using sigmoid function for a smoother transition between no alignment and perfect alignment
-            roi_diff = adaptation_roi - bau_roi
-            
-            # Sigmoid function: 1 / (1 + e^(-k*x))
-            # k controls the steepness of the transition
-            # For our specific ROI differences, we need a much smaller k value
-            # to get intermediate values between 0 and 1
-            def sigmoid(x, k=50):
-                import math
-                return 1.0 / (1.0 + math.exp(-k * x))
-            
-            # Apply sigmoid to the ROI difference
-            alignment = sigmoid(roi_diff)
-            
-            return alignment
+    # Check if we have the required ROI data
+    if isinstance(roi_data, dict) and "bau_roi" in roi_data and "adaptation_roi" in roi_data:
+        # Use economic incentive alignment based on marginal ROI comparison
+        bau_roi = roi_data["bau_roi"]
+        adaptation_roi = roi_data["adaptation_roi"]
+        
+        # Calculate the alignment score based on the ROI difference
+        # Using sigmoid function for a smoother transition between no alignment and perfect alignment
+        roi_diff = adaptation_roi - bau_roi
+        
+        # Sigmoid function: 1 / (1 + e^(-k*x))
+        # k controls the steepness of the transition
+        # For our specific ROI differences, we need a much smaller k value
+        # to get intermediate values between 0 and 1
+        def sigmoid(x, k=50):
+            import math
+            return 1.0 / (1.0 + math.exp(-k * x))
+        
+        # Apply sigmoid to the ROI difference
+        alignment = sigmoid(roi_diff)
+        
+        return alignment
     
     return 0.5
+
 
 def format_sfe_results(sfe: float, alignment: float) -> str:
     """

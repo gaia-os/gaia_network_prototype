@@ -165,14 +165,6 @@ class ResilienceBondNode(Node):
                 }
             )
         
-        elif variable_name == "system_free_energy":
-            # Calculate System Free Energy (SFE)
-            return self._calculate_system_free_energy(query)
-        
-        elif variable_name == "alignment_score":
-            # Calculate alignment score
-            return self._calculate_alignment_score(query)
-        
         return QueryResponse(
             query_id=query.id,
             response_type="error",
@@ -363,68 +355,6 @@ class ResilienceBondNode(Node):
         return default_resilience
 
 
-    def _calculate_system_free_energy(self, query: Query) -> QueryResponse:
-        """Calculate System Free Energy (SFE) for resilience outcomes."""
-        covariates = query.parameters.get("covariates", {})
-        adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
-        
-        # Get the current distribution of resilience outcomes
-        outcome_probabilities = covariates.get("outcome_probabilities", None)
-        
-        if outcome_probabilities is None:
-            return QueryResponse(
-                query_id=query.id,
-                response_type="error",
-                content={"error": "Missing outcome_probabilities in covariates"}
-            )
-        
-        # Get the target distribution for this adaptation strategy
-        target_dist = TARGET_RESILIENCE_DISTRIBUTION.get(adaptation_strategy, [0.1, 0.2, 0.7])
-        
-        # Calculate SFE as KL divergence
-        sfe = calculate_sfe(outcome_probabilities, target_dist)
-        
-        # Create a distribution for the SFE
-        sfe_dist = NormalDistribution(mean=sfe, std=0.01)
-        
-        return QueryResponse(
-            query_id=query.id,
-            response_type="posterior",
-            content={
-                "distribution": MarginalDistribution(
-                    name="system_free_energy",
-                    distribution=sfe_dist,
-                    metadata={
-                        "adaptation_strategy": adaptation_strategy,
-                        "current_distribution": outcome_probabilities,
-                        "target_distribution": target_dist
-                    }
-                ).to_dict()
-            }
-        )
-    
-    def _calculate_alignment_score(self, query: Query) -> QueryResponse:
-        """Calculate alignment score between profit and resilience distributions."""
-        # Extract covariates
-        covariates = query.covariates
-        
-        # Get profit and resilience distributions
-        profit_dist = covariates.get("profit_distribution", {})
-        resilience_dist = covariates.get("resilience_distribution", {})
-        
-        # Calculate alignment score
-        alignment = calculate_alignment_score(profit_dist, resilience_dist)
-        
-        # Create response
-        return QueryResponse(
-            query_id=query.id,
-            response_type="posterior",
-            content={
-                "alignment_score": alignment
-            }
-        )
-
-
 class ResilienceBondHandler(NodeHandler):
     """Handler for the Resilience Bond node (Node D)."""
     
@@ -434,10 +364,6 @@ class ResilienceBondHandler(NodeHandler):
             return self._query_bond_payoff(covariates)
         elif variable_name == "bond_price":
             return self._query_bond_price(covariates)
-        elif variable_name == "system_free_energy":
-            return self._query_system_free_energy(covariates)
-        elif variable_name == "alignment_score":
-            return self._query_alignment_score(covariates)
         return super().query(variable_name, covariates)
     
     def _query_bond_payoff(self, covariates):
@@ -455,26 +381,6 @@ class ResilienceBondHandler(NodeHandler):
         response = self.node.query_posterior(
             target_node_id=self.node.id,
             variable_name="bond_price",
-            covariates=covariates
-        )
-        
-        return response.to_dict()
-    
-    def _query_system_free_energy(self, covariates):
-        """Query Node D for system free energy."""
-        response = self.node.query_posterior(
-            target_node_id=self.node.id,
-            variable_name="system_free_energy",
-            covariates=covariates
-        )
-        
-        return response.to_dict()
-    
-    def _query_alignment_score(self, covariates):
-        """Query Node D for alignment score."""
-        response = self.node.query_posterior(
-            target_node_id=self.node.id,
-            variable_name="alignment_score",
             covariates=covariates
         )
         

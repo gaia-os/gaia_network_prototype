@@ -162,19 +162,17 @@ class RealEstateFinanceNode(Node):
             id="real_estate_finance_model"
         )
     
-    def _calculate_alignment(self, profit_values: Dict[float, float],
-                              resilience_distribution: Dict[float, float]) -> float:
+    def _calculate_alignment(self, profit_values: Dict[str, float]) -> float:
         """Calculate alignment score only, without SFE.
         
         Args:
-            profit_values: Dictionary mapping resilience outcomes to expected profit/ROI
-            resilience_distribution: Dictionary mapping resilience outcomes to their probabilities
+            profit_values: Dictionary containing ROI data (bau_roi, adaptation_roi)
             
         Returns:
             Alignment score between 0 and 1
         """
-        # Calculate alignment score between profit values and resilience distribution
-        alignment = calculate_alignment_score(profit_values, resilience_distribution)
+        # Calculate alignment score using ROI data
+        alignment = calculate_alignment_score(profit_values)
         return alignment
 
     def _calculate_sfe(self, resilience_distribution: Dict[float, float],
@@ -288,16 +286,17 @@ class RealEstateFinanceNode(Node):
         # Calculate SFE
         sfe = self._calculate_sfe(resilience_dist, target_dist)
         
-        # Add ROI comparison metadata to resilience_dist for alignment calculation
-        resilience_dist_with_metadata = resilience_dist.copy()
-        resilience_dist_with_metadata["metadata"] = {
+        # Create a proper profit distribution for alignment calculation
+        profit_distribution = {outcome: profit_values[outcome] for outcome in resilience_dist.keys() 
+                               if outcome in profit_values}
+        
+        # Calculate alignment score
+        roi_data = {
             "bau_roi": bau_roi,
             "adaptation_roi": adaptation_roi,
             "adaptation_strategy": adaptation_strategy
         }
-        
-        # Calculate alignment score
-        alignment = self._calculate_alignment(profit_values, resilience_dist_with_metadata)
+        alignment = self._calculate_alignment(roi_data)
         
         # Create the response
         return QueryResponse(
