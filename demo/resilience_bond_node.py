@@ -18,7 +18,7 @@ from gaia_network.distribution import Distribution, NormalDistribution, BetaDist
 from gaia_network.registry import register_node
 
 from demo.node_handler import NodeHandler
-from demo.sfe_calculator import calculate_sfe, calculate_alignment_score, TARGET_RESILIENCE_DISTRIBUTION
+from demo.sfe_calculator import calculate_sfe, calculate_alignment_score_dict, TARGET_RESILIENCE_DISTRIBUTION
 
 
 class ResilienceBondNode(Node):
@@ -404,46 +404,23 @@ class ResilienceBondNode(Node):
         )
     
     def _calculate_alignment_score(self, query: Query) -> QueryResponse:
-        """Calculate alignment score between profit and climate resilience goals."""
-        covariates = query.parameters.get("covariates", {})
-        adaptation_strategy = covariates.get("adaptation_strategy", "BAU")
-        include_bond = covariates.get("include_bond", "no")
+        """Calculate alignment score between profit and resilience distributions."""
+        # Extract covariates
+        covariates = query.covariates
         
-        # Get profit distribution (represented by ROI values)
-        profit_dist = covariates.get("profit_distribution", None)
-        
-        # Get resilience distribution
-        resilience_dist = covariates.get("resilience_distribution", None)
-        
-        if profit_dist is None or resilience_dist is None:
-            return QueryResponse(
-                query_id=query.id,
-                response_type="error",
-                content={"error": "Missing profit_distribution or resilience_distribution in covariates"}
-            )
+        # Get profit and resilience distributions
+        profit_dist = covariates.get("profit_distribution", {})
+        resilience_dist = covariates.get("resilience_distribution", {})
         
         # Calculate alignment score
-        alignment = calculate_alignment_score(profit_dist, resilience_dist)
+        alignment = calculate_alignment_score_dict(profit_dist, resilience_dist)
         
-        # Create a distribution for the alignment score
-        alignment_dist = BetaDistribution(
-            alpha=alignment * 10 + 1,  # Shape parameters to center around the alignment value
-            beta=(1 - alignment) * 10 + 1
-        )
-        
+        # Create response
         return QueryResponse(
             query_id=query.id,
             response_type="posterior",
             content={
-                "distribution": MarginalDistribution(
-                    name="alignment_score",
-                    distribution=alignment_dist,
-                    metadata={
-                        "adaptation_strategy": adaptation_strategy,
-                        "include_bond": include_bond,
-                        "alignment_value": alignment
-                    }
-                ).to_dict()
+                "alignment_score": alignment
             }
         )
 

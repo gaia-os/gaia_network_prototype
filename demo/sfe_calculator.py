@@ -223,19 +223,23 @@ def calculate_alignment_score_dict(profit_dict: Dict[float, float], resilience_d
             print(f"Adaptation ROI: {adaptation_roi:.4f}")
             
             # Calculate the alignment score based on the ROI difference
-            # If Adaptation ROI > BAU ROI, alignment is perfect (1.0)
-            # If Adaptation ROI < BAU ROI, alignment is poor (0.0)
+            # Using sigmoid function for a smoother transition between no alignment and perfect alignment
             roi_diff = adaptation_roi - bau_roi
             print(f"ROI difference (Adaptation - BAU): {roi_diff:.4f}")
             
-            if roi_diff > 0:
-                # Adaptation is more profitable than BAU, perfect alignment
-                alignment = 1.0
-            else:
-                # BAU is more profitable than Adaptation, no alignment
-                alignment = 0.0
+            # Sigmoid function: 1 / (1 + e^(-k*x))
+            # k controls the steepness of the transition
+            # For our specific ROI differences, we need a much smaller k value
+            # to get intermediate values between 0 and 1
+            def sigmoid(x, k=50):
+                import math
+                return 1.0 / (1.0 + math.exp(-k * x))
+            
+            # Apply sigmoid to the ROI difference
+            alignment = sigmoid(roi_diff)
             
             print(f"Economic incentive alignment: {alignment:.4f}")
+            print(f"Raw alignment value (before percentage formatting): {alignment}")
             return alignment
     
     # Ensure both dictionaries have the same keys
@@ -282,101 +286,28 @@ def calculate_alignment_score(profit_dist: Any, resilience_dist: Any) -> float:
     """
     Calculate alignment score between profit distribution and resilience distribution.
     
+    This function is a wrapper around calculate_alignment_score_dict, which measures
+    how well the profit incentives align with better resilience outcomes.
+    
+    A score of 1.0 means perfect alignment (profit-maximizing behavior leads to best resilience outcomes).
+    A score of 0.0 means no alignment (profit-maximizing behavior leads to worst resilience outcomes).
+    
     Args:
-        profit_dist: Distribution representing profit outcomes (list, dict, or Distribution object)
-        resilience_dist: Distribution representing resilience outcomes (list, dict, or Distribution object)
+        profit_dist: Distribution representing profit outcomes (should be a dictionary)
+        resilience_dist: Distribution representing resilience outcomes (should be a dictionary)
         
     Returns:
         Alignment score between 0 and 1, where 1 is perfect alignment
     """
-    # For dictionary-based profit values and dictionary-based resilience distribution
-    if isinstance(profit_dist, dict) and isinstance(resilience_dist, dict):
-        return calculate_alignment_score_dict(profit_dist, resilience_dist)
+    # Convert inputs to dictionaries if they're not already
+    if not isinstance(profit_dist, dict):
+        raise ValueError("profit_dist must be a dictionary mapping resilience outcomes to profit values")
     
-    # For discrete distributions as lists, use weighted correlation
-    elif isinstance(profit_dist, list) and isinstance(resilience_dist, list):
-        # Ensure equal length
-        min_len = min(len(profit_dist), len(resilience_dist))
-        profit_values = profit_dist[:min_len]
-        resilience_values = resilience_dist[:min_len]
-        
-        # Normalize profit values to [0,1] range for better comparison
-        # Use min-max scaling if values are all positive or all negative
-        if all(p >= 0 for p in profit_values) or all(p <= 0 for p in profit_values):
-            min_profit = min(profit_values)
-            max_profit = max(profit_values)
-            # Avoid division by zero
-            if max_profit == min_profit:
-                norm_profit_values = [0.5 for _ in profit_values]
-            else:
-                norm_profit_values = [(p - min_profit) / (max_profit - min_profit) for p in profit_values]
-        else:
-            # Use sigmoid for mixed positive/negative values
-            def sigmoid(x):
-                return 1 / (1 + np.exp(-x * 5))
-            norm_profit_values = [sigmoid(p) for p in profit_values]
-        
-        # Calculate weighted similarity (higher weight for better resilience outcomes)
-        similarity_sum = 0
-        weight_sum = 0
-        
-        for i in range(min_len):
-            # Weight by resilience value (higher resilience = higher weight)
-            weight = resilience_values[i] + 0.1  # Add small constant to avoid zero weights
-            # Calculate similarity as 1 - absolute difference between normalized values
-            similarity = 1 - abs(norm_profit_values[i] - resilience_values[i])
-            similarity_sum += similarity * weight
-            weight_sum += weight
-        
-        # Calculate weighted average similarity
-        if weight_sum > 0:
-            alignment = similarity_sum / weight_sum
-        else:
-            alignment = 0.5  # Default if all weights are zero
-            
-        return alignment
+    if not isinstance(resilience_dist, dict):
+        raise ValueError("resilience_dist must be a dictionary mapping resilience outcomes to probabilities")
     
-    # For normal distributions, use a function of the means
-    elif isinstance(profit_dist, NormalDistribution) and isinstance(resilience_dist, NormalDistribution):
-        # Use sigmoid function for normalization of profit mean
-        # Sigmoid maps any real number to (0, 1) range in a smooth way
-        def sigmoid(x):
-            return 1 / (1 + np.exp(-x))
-        
-        # Scale the profit mean before applying sigmoid (steepness factor)
-        # For ROI values, a factor of 5 gives good separation in the typical range
-        norm_profit = sigmoid(profit_dist.mean * 5)
-        
-        # Resilience is already in [0, 1] range, but ensure it stays there
-        norm_resilience = min(max(resilience_dist.mean, 0), 1)
-        
-        # Calculate alignment as a function of the normalized means
-        alignment = 1 - abs(norm_profit - norm_resilience)
-        return alignment
-    
-    # For beta distributions, use a function of the means
-    elif isinstance(profit_dist, BetaDistribution) and isinstance(resilience_dist, BetaDistribution):
-        # Calculate means
-        profit_mean = profit_dist.alpha / (profit_dist.alpha + profit_dist.beta)
-        resilience_mean = resilience_dist.alpha / (resilience_dist.alpha + resilience_dist.beta)
-        
-        # Use sigmoid function for normalization of profit mean
-        def sigmoid(x):
-            return 1 / (1 + np.exp(-x))
-        
-        # Scale the profit mean before applying sigmoid
-        norm_profit = sigmoid(profit_mean * 5)
-        
-        # Calculate alignment as a function of the normalized means
-        alignment = 1 - abs(norm_profit - resilience_mean)
-        return alignment
-    
-    # Handle marginal distributions
-    elif isinstance(profit_dist, MarginalDistribution) and isinstance(resilience_dist, MarginalDistribution):
-        return calculate_alignment_score(profit_dist.distribution, resilience_dist.distribution)
-    
-    else:
-        raise ValueError(f"Unsupported distribution types: {type(profit_dist)} and {type(resilience_dist)}")
+    # Calculate alignment score using the dictionary-based approach
+    return calculate_alignment_score_dict(profit_dist, resilience_dist)
 
 
 def format_sfe_results(sfe: float, alignment: float) -> str:
@@ -418,6 +349,22 @@ def visualize_distributions(current_dist: List[float], target_dist: List[float],
         result += f"{label:<15} {current:.2%}      {target:.2%}      {gap:+.2%}\n"
     
     print(result)
+
+
+# Define a modified sigmoid function for alignment score calculation
+def modified_sigmoid(x, k=10):
+    """
+    A modified sigmoid function for calculating alignment scores based on ROI differences.
+    
+    Args:
+        x: The input value (typically the ROI difference between Adaptation and BAU)
+        k: The steepness parameter (smaller values give a smoother transition)
+        
+    Returns:
+        A value between 0 and 1 representing the alignment score
+    """
+    import math
+    return 1.0 / (1.0 + math.exp(-k * x))
 
 
 # Define global target distribution for climate resilience

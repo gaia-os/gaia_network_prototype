@@ -21,7 +21,7 @@ from gaia_network.distribution import (
 from gaia_network.registry import register_node
 
 from demo.node_handler import NodeHandler
-from demo.sfe_calculator import calculate_sfe, calculate_alignment_score, TARGET_RESILIENCE_DISTRIBUTION
+from demo.sfe_calculator import calculate_sfe, calculate_alignment_score_dict, TARGET_RESILIENCE_DISTRIBUTION, modified_sigmoid
 
 
 class RealEstateFinanceNode(Node):
@@ -180,7 +180,7 @@ class RealEstateFinanceNode(Node):
         
         # Calculate alignment score between profit values and resilience distribution
         # Pass the full resilience distribution dictionary for proper correlation calculation
-        alignment = calculate_alignment_score(profit_values, resilience_distribution)
+        alignment = calculate_alignment_score_dict(profit_values, resilience_distribution)
         
         return sfe, alignment
 
@@ -280,24 +280,16 @@ class RealEstateFinanceNode(Node):
         # Calculate SFE
         sfe = calculate_sfe(resilience_dist, target_dist)
         
-        # Calculate alignment score based on economic incentives
-        # If Adaptation ROI > BAU ROI, alignment is perfect (1.0)
-        # If Adaptation ROI < BAU ROI, alignment is poor (0.0)
-        roi_diff = adaptation_roi - bau_roi
+        # Add ROI comparison metadata to resilience_dist for alignment calculation
+        resilience_dist_with_metadata = resilience_dist.copy()
+        resilience_dist_with_metadata["metadata"] = {
+            "bau_roi": bau_roi,
+            "adaptation_roi": adaptation_roi,
+            "adaptation_strategy": adaptation_strategy
+        }
         
-        print("\n=== ECONOMIC INCENTIVE ALIGNMENT ===")
-        print(f"BAU ROI: {bau_roi:.4f}")
-        print(f"Adaptation ROI: {adaptation_roi:.4f}")
-        print(f"ROI difference (Adaptation - BAU): {roi_diff:.4f}")
-        
-        if roi_diff > 0:
-            # Adaptation is more profitable than BAU, perfect alignment
-            alignment = 1.0
-        else:
-            # BAU is more profitable than Adaptation, no alignment
-            alignment = 0.0
-        
-        print(f"Economic incentive alignment: {alignment:.4f}")
+        # Calculate alignment score using the function from sfe_calculator
+        alignment = calculate_alignment_score_dict(profit_values, resilience_dist_with_metadata)
         
         # Create the response
         return QueryResponse(
