@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "title": "Gaia Network General Parameters",
+    "description": "Global parameters and settings for the Gaia Network simulation",
+    "version": "1.0.1",
+    "updated": "2023-03-20"
+  },
+  "simulation": {
+    "base_year": 2023,
+    "max_time_horizon": 50,
+    "time_step": 1,
+    "units": {
+      "time": "years",
+      "sea_level": "meters",
+      "property_values": "index",
+      "roi": "percentage",
+      "confidence": "probability"
+    },
+    "random_seed": 42,
+    "monte_carlo_iterations": 1000
+  },
+  "climate_models": {
+    "rcp_scenarios": ["RCP2.6", "RCP4.5", "RCP6.0", "RCP8.5"],
+    "default_scenario": "RCP4.5",
+    "internal_variability": 0.2,
+    "confidence_decay_rate": 0.005
+  },
+  "financial_models": {
+    "base_discount_rate": 0.03,
+    "market_volatility": 0.15,
+    "property_depreciation_rate": 0.015,
+    "expected_market_return": 0.07
+  },
+  "adaptation": {
+    "min_level": 0.0,
+    "max_level": 1.0,
+    "cost_function": "quadratic",
+    "diminishing_returns_factor": 0.7,
+    "effectiveness_decay_rate": 0.01,
+    "payback_period_range": [5, 25]
+  },
+  "visualization": {
+    "color_schemes": {
+      "sea_level": ["#BFDBFE", "#3B82F6"],
+      "property_values": ["#D1FAE5", "#10B981"],
+      "roi": ["#E0E7FF", "#6366F1"],
+      "risk": ["#FEE2E2", "#EF4444"]
+    },
+    "default_chart_height": 300
+  },
+  "regional_settings": {
+    "default_region": "miami_florida",
+    "regions": [
+      "miami_florida",
+      "new_york_city",
+      "houston_texas",
+      "new_orleans_louisiana",
+      "san_francisco_california"
+    ]
+  }
+} 
