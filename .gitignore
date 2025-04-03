@@ -131,11 +131,10 @@ dmypy.json
 .DS_Store
 
 # Custom
-.gigaignore
-.giga
-.cursor
-.cursorrules
-.windsurfrules
+/.gigaignore
 /.mypy_cache
 /venv
 Gaia Network.code-workspace
+
+web_interface/.next/
+web_interface/node_modules/

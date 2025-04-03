@@ -1,0 +1,84 @@
+{
+  "metadata": {
+    "title": "Gaia Network Predefined Scenarios",
+    "description": "Predefined scenarios for the Gaia Network demonstration",
+    "created": "2023-03-15",
+    "version": "1.0.0"
+  },
+  "scenarios": [
+    {
+      "id": "financial_viability",
+      "name": "Financial Viability of Coastal Properties",
+      "description": "Evaluates how sea level rise affects long-term property values and insurance costs in Miami.",
+      "image_emoji": "🏙️",
+      "parameters": {
+        "time_horizon": 30,
+        "adaptation_level": 0.3,
+        "climate_scenario": "RCP4.5"
+      },
+      "highlight": "Shows that without adaptation measures, coastal property values decline by 35% over 30 years.",
+      "results_summary": {
+        "final_sea_level": 0.56,
+        "final_property_value": 65,
+        "final_roi": 0.02,
+        "avg_confidence": 0.72
+      },
+      "tags": ["finance", "property", "sea-level", "economics"]
+    },
+    {
+      "id": "climate_resilience",
+      "name": "Climate Resilience Investment",
+      "description": "Models the ROI of climate adaptation infrastructure across coastal communities.",
+      "image_emoji": "🌊",
+      "parameters": {
+        "time_horizon": 25,
+        "adaptation_level": 0.8,
+        "climate_scenario": "RCP6.0"
+      },
+      "highlight": "Demonstrates how high adaptation investments maintain property values despite increasing climate risks.",
+      "results_summary": {
+        "final_sea_level": 0.48,
+        "final_property_value": 108,
+        "final_roi": 0.07,
+        "avg_confidence": 0.68
+      },
+      "tags": ["adaptation", "infrastructure", "resilience", "investment"]
+    },
+    {
+      "id": "worst_case",
+      "name": "High-Emissions Investment Assessment",
+      "description": "Evaluates financial impacts under a high-emissions scenario with minimal adaptation.",
+      "image_emoji": "🏭",
+      "parameters": {
+        "time_horizon": 40,
+        "adaptation_level": 0.2,
+        "climate_scenario": "RCP8.5"
+      },
+      "highlight": "Projects severe financial losses and insurance unavailability in high-risk coastal zones.",
+      "results_summary": {
+        "final_sea_level": 0.92,
+        "final_property_value": 32,
+        "final_roi": -0.04,
+        "avg_confidence": 0.62
+      },
+      "tags": ["high-emissions", "risk", "insurance", "property-loss"]
+    }
+  ],
+  "scenario_categories": [
+    {
+      "id": "financial",
+      "name": "Financial Impact Scenarios",
+      "description": "Scenarios focusing on financial impacts and ROI"
+    },
+    {
+      "id": "mitigation",
+      "name": "Climate Mitigation Scenarios",
+      "description": "Scenarios with different levels of emissions mitigation"
+    },
+    {
+      "id": "adaptation",
+      "name": "Adaptation Scenarios",
+      "description": "Scenarios with different levels of adaptation investment"
+    }
+  ]
+} 
