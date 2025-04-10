@@ -271,6 +271,92 @@ This section breaks down the high-level objectives from Section 1.1 into specifi
 *   **Q3.2:** Can a Strategic Provider successfully perform a "bait-and-switch" (build reputation, then deceive) against different customer types? How effective is it?
 *   **Q3.3:** How does the performance degrade with an increasing proportion of low-reliability or Strategic (deceptive) providers?
 
-## Experiment 2: Additional mechanisms (LATER)
+## Experiment 2: Generalized Trust Modeling (Mixture Models)
+
+### 2.1 Objective
+
+Evaluate the effectiveness and adaptability of a generalized trust model based on arbitrary mixture components. This experiment extends Experiment 1 by replacing the fixed two-component Beta mixture with a more flexible K-component system capable of representing diverse provider behaviors and incorporating richer evidence.
+
+High-level hypotheses:
+
+1.  The generalized mixture model can accurately learn and represent a wider range of provider behaviors (e.g., bias, intermittent failures, strategic deception) compared to the simpler 2-component Beta model.
+2.  Incorporating model-specific observable spaces ($O_k$) alongside data correctness improves the accuracy and responsiveness of reliability estimation ($\rho_{jm}$) and model identification ($w_{ijmk}$).
+3.  The Dirichlet-based weighting mechanism allows customers to adaptively assign credibility to different behavioral models for each provider based on evidence.
+4.  Hierarchical priors on model weights ($\mathbf{a}_0$) enable incorporating meta-knowledge (e.g., model complexity, source authority) to guide learning.
+5.  The system can potentially adapt "in flight" by adding new behavioral models ($m_{K+1}$) to the mixture if existing models fail to explain observed behavior.
+
+### 2.2 Experimental Setup
+
+#### 2.2.1 Network Setup
+
+Similar to Experiment 1, involving **Providers** and **Customers/Decision-Makers**. Providers generate data $\hat{x}_{vmj}$ and potentially exhibit other behaviors captured by $O_k$. Customers infer latent variables $Z$ and provider reliability $\rho_{jm}$.
+
+#### 2.2.2 World Model
+
+Follows the structure of Experiment 1 (rounds, data collection, inference, reward, trust update). Customers still use potentially flawed likelihoods $L_{i,m,z,x}$ and select providers based on EIG.
+
+#### 2.2.3 Generalized Trust Model (K-Component Mixture)
+
+Customer $i$'s belief about provider $j$'s reliability for modality $m$ is modeled as a K-component mixture:
+
+$$ P_i(\rho_{jm}) = \sum_{k=1}^K w_{ijmk} P_k(\rho_{jm} | \zeta_{ijmk}, \theta_{mk}) $$
+
+Where:
+
+*   **Model Components ($k=1...K$):** Each $m_k$ is a distinct probabilistic model representing a potential provider behavior pattern. Each model $k$ defines:
+    *   $P_k(\rho_{jm} | \zeta_{ijmk}, \theta_{mk})$: The conditional distribution over reliability $\rho_{jm}$, given model-specific latent parameters $\zeta_{ijmk}$ (e.g., for a Beta model, $\zeta = (\alpha, \beta)$) and optional global parameters $\theta_{mk}$.
+    *   Optionally, a model-specific observable space $O_k$ (e.g., response latency, metadata patterns) and a likelihood $P_k(O_{kj} | \zeta_{ijmk}, \theta_{mk})$ describing how these observables relate to the model's latent parameters. If $O_k$ is not defined, inference relies solely on the correctness of $\hat{x}_{vmj}$ (as in Experiment 1).
+*   **Mixture Weights ($\mathbf{w}_{ijm}$):** A probability vector $\mathbf{w}_{ijm} = (w_{ijmk})_{k=1}^K$, where $\sum_k w_{ijmk} = 1$. $w_{ijmk}$ represents customer $i$'s belief that provider $j$ is currently operating according to model $k$. These weights are drawn from a Dirichlet distribution:
+    $$ P(\mathbf{w}_{ijm}) = \text{Dirichlet}(\mathbf{w}_{ijm} | \mathbf{a}_{ijm}) $$
+*   **Hierarchical Prior ($\mathbf{a}_{ijm}$):** The Dirichlet parameters $\mathbf{a}_{ijm} = (a_{ijm1}, ..., a_{ijmK})$ for provider $j$ have a shared prior distribution governed by global hyperparameters $\mathbf{a}_0 = (a_{01}, ..., a_{0K})$.
+    $$ P(\mathbf{a}_{ijm}) = \text{CommonPrior}(\mathbf{a}_{ijm} | \mathbf{a}_0) $$
+    The global prior $\mathbf{a}_0$ encodes *a priori* beliefs about the general prevalence or trustworthiness associated with each *type* of model $k$. For example, simpler models might get higher prior weight $a_{0k}$. This prior can be fixed or potentially learned.
+
+**Example Models ($m_k$) beyond Beta:**
+
+*   **Biased Provider:** Models reliability $\rho$ and a systematic bias parameter $\delta$ in the reported data.
+*   **Intermittent Failure:** Models transitions between a 'Good' state (high $\rho$) and a 'Bad' state (low $\rho$).
+*   **Strategic Deceiver (Advanced):** Models behavior that explicitly tries to manipulate the customer's belief, potentially using $O_k$ like timing patterns.
+*   **Latency-Correlated Reliability:** Uses response time as an observable $O_k$ to inform $\rho$.
+
+**Updating the Model (Variational Inference):**
+
+Due to the non-conjugate nature of arbitrary mixture models, updating the posterior beliefs requires approximate Bayesian inference. We propose using **Variational Inference (VI)**. This involves:
+
+1.  **Defining Variational Distributions:** Introduce tractable approximate posterior distributions (variational distributions) $q(\mathbf{w}_{ijm})$ for the mixture weights and $q(\zeta_{ijmk})$ for the model-specific parameters for each model $k$. These $q$ distributions are parameterized by variational parameters (e.g., parameters of a Dirichlet for $q(\mathbf{w})$, parameters specific to the model type for $q(\zeta)$).
+2.  **Evidence Lower Bound (ELBO):** Construct the ELBO for the joint posterior $P(\mathbf{w}_{ijm}, \{\zeta_{ijmk}\}_{k=1}^K | \text{Data})$. The ELBO is a lower bound on the log marginal likelihood of the observed data ($\hat{x}_{vmj}$ and any relevant $O_{kj}$).
+3.  **Optimization:** Maximize the ELBO with respect to the variational parameters. This optimization process iteratively adjusts the parameters of the $q$ distributions to make them as close as possible (in KL divergence) to the true posterior distributions. Standard VI techniques like Coordinate Ascent Variational Inference (CAVI) or stochastic gradient methods (using libraries like Pyro or PyMC) can be employed.
+4.  **Parameter Updates:** The optimized variational parameters effectively represent the updated posterior beliefs about the mixture weights ($\mathbf{w}_{ijm}$) and the model-specific parameters ($\zeta_{ijmk}$). Global parameters $\theta_{mk}$ can potentially be updated via Expectation-Maximization (EM)-like steps within the VI framework or using pooled gradients if using stochastic VI.
+
+**Pooling:**
+
+*   Pooling Dirichlet parameters $\mathbf{a}_{ijm}$ (e.g., by summing updates or averaging) can establish priors for the next round.
+*   Pooling model-specific parameters $\zeta_{ijmk}$ requires methods suitable for the specific parameter types (e.g., moment matching, averaging posterior samples).
+*   Learned global parameters $\theta_{mk}$ can be shared.
+
+**Expected Reliability:**
+
+Calculated as the weighted average across models:
+$$ E_i[\rho_{jm}] = \sum_{k=1}^K w_{ijmk} E[P_k(\rho_{jm} | \zeta_{ijmk}, \theta_{mk})] $$
+
+### 2.3 Agent Implementations
+
+*   **Customers:** Implement the generalized trust model and approximate inference.
+*   **Providers:** Implement various behaviors corresponding to the defined models $m_k$ (e.g., passive honest, biased, intermittent failure, strategic).
+
+### 2.4 Evaluation Metrics
+
+*   **Model Identification Accuracy:** How well can customers correctly identify the true underlying model $k^*$ generating a provider's behavior (i.e., does $w_{ijmk^*}$ converge to 1)?
+*   **Reliability Estimation Accuracy:** Compare estimated $E_i[\rho_{jm}]$ against the provider's true (potentially time-varying) reliability.
+*   **Adaptation Speed:** How quickly does the system (weights $w_{ijmk}$ and parameters $\zeta_{ijmk}$) adapt when a provider changes its behavior?
+*   **Impact of Observables ($O_k$):** Compare performance with and without using additional observables $O_k$.
+*   **Customer Performance:** Track customer reward $r_i$ and posterior convergence, comparing against Experiment 1 baseline.
+*   **Robustness:** Test against providers switching between known models or exhibiting entirely novel behaviors not initially in the mixture.
+
+### 2.5 Discussion
+
+This experiment tests a significantly more powerful but complex trust modeling approach. Key challenges include managing the complexity of model definition, ensuring scalable and accurate approximate inference, and designing effective pooling mechanisms. Success would demonstrate a path towards highly adaptive and robust reputation systems in distributed networks.
+
+## Experiment 3: Additional mechanisms (LATER)
 
 In this experiment, we will explore whether a combination of mechanisms such as escrows, endorsements and trust staking can further improve the resilience and overall quality of the network.
