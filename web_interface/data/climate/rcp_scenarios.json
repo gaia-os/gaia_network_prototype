@@ -1,0 +1,61 @@
+{
+  "metadata": {
+    "source": "IPCC AR6 Climate Change 2021: The Physical Science Basis",
+    "description": "Intergovernmental Panel on Climate Change (IPCC) Representative Concentration Pathways (RCPs)",
+    "last_updated": "2021-08-09"
+  },
+  "scenarios": {
+    "RCP2.6": {
+      "description": "Low emissions scenario with aggressive mitigation",
+      "global_temp_increase_by_2100": "1.0-1.8°C",
+      "co2_concentration_by_2100": "421 ppm",
+      "sea_level_rise_by_2100": "0.29-0.59m",
+      "probability_exceeding_2C": "0-29%"
+    },
+    "RCP4.5": {
+      "description": "Intermediate emissions scenario with moderate mitigation",
+      "global_temp_increase_by_2100": "1.7-3.2°C",
+      "co2_concentration_by_2100": "538 ppm",
+      "sea_level_rise_by_2100": "0.39-0.72m",
+      "probability_exceeding_2C": "44-76%"
+    },
+    "RCP6.0": {
+      "description": "Intermediate-high emissions scenario with delayed mitigation",
+      "global_temp_increase_by_2100": "2.0-3.7°C",
+      "co2_concentration_by_2100": "670 ppm",
+      "sea_level_rise_by_2100": "0.45-0.82m",
+      "probability_exceeding_2C": "58-84%"
+    },
+    "RCP8.5": {
+      "description": "High emissions scenario with no additional mitigation",
+      "global_temp_increase_by_2100": "3.2-5.4°C",
+      "co2_concentration_by_2100": "936 ppm",
+      "sea_level_rise_by_2100": "0.61-1.10m",
+      "probability_exceeding_2C": "93-100%"
+    }
+  },
+  "regional_impacts": {
+    "miami_florida": {
+      "RCP2.6": {
+        "sea_level_rise_by_2100": "0.35-0.65m",
+        "days_above_95F_by_2100": "60-90 days/year",
+        "hurricane_intensity_increase": "5-10%"
+      },
+      "RCP4.5": {
+        "sea_level_rise_by_2100": "0.45-0.85m",
+        "days_above_95F_by_2100": "90-120 days/year",
+        "hurricane_intensity_increase": "10-20%"
+      },
+      "RCP6.0": {
+        "sea_level_rise_by_2100": "0.55-0.95m",
+        "days_above_95F_by_2100": "110-140 days/year",
+        "hurricane_intensity_increase": "15-25%"
+      },
+      "RCP8.5": {
+        "sea_level_rise_by_2100": "0.75-1.25m",
+        "days_above_95F_by_2100": "140-180 days/year",
+        "hurricane_intensity_increase": "20-35%"
+      }
+    }
+  }
+} 

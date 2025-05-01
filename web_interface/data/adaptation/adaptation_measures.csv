@@ -1,0 +1,21 @@
+measure_id,category,name,cost_per_unit,effectiveness_rating,lifespan_years,applicability,carbon_footprint
+AM001,infrastructure,Seawall Enhancement,2500000,0.75,25,"coastal,urban",high
+AM002,infrastructure,Elevated Building Foundations,85000,0.65,50,"coastal,inland",medium
+AM003,infrastructure,Stormwater Management Systems,1200000,0.70,30,"coastal,urban,inland",medium
+AM004,infrastructure,Permeable Pavement Installation,450,0.45,15,"urban,inland",low
+AM005,infrastructure,Living Shorelines,3500,0.80,20,"coastal,rural",very_low
+AM006,policy,Zoning Restrictions,250000,0.90,100,"coastal,urban,rural",none
+AM007,policy,Building Code Updates,180000,0.85,30,"coastal,urban,inland",none
+AM008,policy,Property Buyout Programs,12000000,0.95,permanent,"coastal,flood_plain",low
+AM009,policy,Tax Incentives for Resilience,5000000,0.60,10,"coastal,urban,inland",none
+AM010,behavioral,Community Education Programs,350000,0.40,5,"coastal,urban,rural,inland",very_low
+AM011,behavioral,Early Warning Systems,2800000,0.75,15,"coastal,flood_plain",low
+AM012,behavioral,Emergency Response Training,420000,0.55,3,"coastal,urban,rural,inland",very_low
+AM013,natural,Wetland Restoration,850000,0.85,50,"coastal,rural",negative
+AM014,natural,Mangrove Planting,320000,0.80,30,"coastal,tropical",negative
+AM015,natural,Coral Reef Protection,1500000,0.75,100,"coastal,tropical",negative
+AM016,natural,Dune Restoration,275000,0.70,15,"coastal,beach",very_low
+AM017,financial,Catastrophe Bonds,8500000,0.65,7,"coastal,urban,high_value",none
+AM018,financial,Parametric Insurance,3800000,0.60,5,"coastal,urban,rural",none
+AM019,financial,Resilience Impact Bonds,12500000,0.75,10,"coastal,urban",none
+AM020,financial,Microinsurance Programs,1250000,0.50,3,"coastal,rural,low_income",none 
